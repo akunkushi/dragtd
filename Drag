@@ -1,5 +1,5 @@
 -- ==========================================================
--- TOWER DEFENSE MACRO SCRIPT (VERSION 4.0 - ROBUST MATCH SYNC & TOWER FINDER)
+-- TOWER DEFENSE MACRO SCRIPT (VERSION 4.1 - STABLE MATCH PLAYBACK)
 -- Designed for Mobile / Delta Executor (Android)
 -- ==========================================================
 
@@ -38,7 +38,7 @@ corner.Parent = mainFrame
 local title = Instance.new("TextLabel")
 title.Size = UDim2.new(1, -40, 0, 40)
 title.BackgroundTransparency = 1
-title.Text = "  Tower Macro Pro v4.0"
+title.Text = "  Tower Macro Pro v4.1"
 title.TextColor3 = Color3.fromRGB(255, 255, 255)
 title.TextSize = 14
 title.Font = Enum.Font.GothamBold
@@ -226,7 +226,7 @@ local function logMessage(msg, color)
     end)
 end
 
-logMessage("Tower Macro Pro v4.0 Loaded. Ready.", Color3.fromRGB(100, 200, 255))
+logMessage("Tower Macro Pro v4.1 Loaded. Ready.", Color3.fromRGB(100, 200, 255))
 
 -- ==================== MINIMIZE LOGIC (AUTO MINIMIZED AWAL) ====================
 local isMinimized = true 
@@ -371,7 +371,7 @@ oldNamecall = hookmetamethod(game, "__namecall", function(self, ...)
     local success = res[1]
     local serverResult = res[2]
     
-    -- DETEKSI START MATCH: Memaksa restart makro setiap kali StartMatch dijalankan (walaupun makro sebelumnya masih berjalan)
+    -- DETEKSI START MATCH: Memaksa restart makro setiap kali StartMatch dijalankan
     if tostring(self.Name) == "StartMatch" and (method == "FireServer" or method == "InvokeServer") then
         if autoStartEnabled and not isRecording then
             local currentTime = tick()
@@ -654,12 +654,16 @@ startPlayback = function()
                     if not remote then return false end
 
                     if action.Type == "Place" then
+                        local placeRes
                         if action.Method == "InvokeServer" then
-                            return remote:InvokeServer(unpack(action.Args))
+                            placeRes = remote:InvokeServer(unpack(action.Args))
                         else
                             remote:FireServer(unpack(action.Args))
-                            return true
+                            placeRes = true
                         end
+                        -- Beri jeda stabilisasi singkat agar model tower sempat ter-render di workspace match baru
+                        task.wait(0.3)
+                        return placeRes
                     elseif action.Type == "Upgrade" or action.Type == "Sell" then
                         -- AMBIL POSISI BERDASARKAN TOWER INDEX YANG TEPAT
                         local targetPos = recordedPlacePositions[action.TowerIndex]
@@ -677,9 +681,7 @@ startPlayback = function()
                         if targetPos then
                             local minDst = math.huge
                             for _, obj in ipairs(workspace:GetDescendants()) do
-                                -- FILTER: Pastikan objek adalah Model dan AKTIF di match baru (Parent tidak nil)
                                 if obj:IsA("Model") and obj.Parent ~= nil then
-                                    -- Cari root model utama di bawah workspace atau folder unit/tower
                                     local rootModel = obj
                                     while rootModel.Parent and rootModel.Parent ~= workspace and not rootModel.Parent:IsA("Workspace") do
                                         if rootModel.Parent.Name == "Towers" or rootModel.Parent.Name == "Units" or rootModel.Parent.Name == "TowersFolder" or rootModel.Parent:IsA("Folder") then
@@ -691,8 +693,8 @@ startPlayback = function()
                                     local pos = getModelPosition(rootModel)
                                     if pos then
                                         local dist = (pos - targetPos).Magnitude
-                                        -- Radius ketat 6 stud untuk akurasi tinggi pada tower berdekatan
-                                        if dist < 6 and dist < minDst then
+                                        -- Radius toleransi ditingkatkan sedikit ke 7.5 agar aman dari pergeseran grid render
+                                        if dist < 7.5 and dist < minDst then
                                             minDst = dist
                                             targetObj = rootModel
                                         end
