@@ -1,5 +1,5 @@
 -- ==========================================================
--- TOWER DEFENSE MACRO SCRIPT (VERSION 3.7 - PRECISE TOWER BINDING)
+-- TOWER DEFENSE MACRO SCRIPT (VERSION 3.8 - FIXED INSTANCE & TOWER BINDING)
 -- Designed for Mobile / Delta Executor (Android)
 -- ==========================================================
 
@@ -38,7 +38,7 @@ corner.Parent = mainFrame
 local title = Instance.new("TextLabel")
 title.Size = UDim2.new(1, -40, 0, 40)
 title.BackgroundTransparency = 1
-title.Text = "  Tower Macro Pro v3.7"
+title.Text = "  Tower Macro Pro v3.8"
 title.TextColor3 = Color3.fromRGB(255, 255, 255)
 title.TextSize = 14
 title.Font = Enum.Font.GothamBold
@@ -226,7 +226,7 @@ local function logMessage(msg, color)
     end)
 end
 
-logMessage("Tower Macro Pro v3.7 Loaded. Ready.", Color3.fromRGB(100, 200, 255))
+logMessage("Tower Macro Pro v3.8 Loaded. Ready.", Color3.fromRGB(100, 200, 255))
 
 -- ==================== MINIMIZE LOGIC (AUTO MINIMIZED AWAL) ====================
 local isMinimized = true 
@@ -526,6 +526,8 @@ local function saveMacro()
                     for k, v in pairs(act.Args) do
                         if typeof(v) == "Vector3" then
                             serializedArgs[k] = {__type = "Vector3", X = v.X, Y = v.Y, Z = v.Z}
+                        elseif typeof(v) == "Instance" then
+                            serializedArgs[k] = {__type = "TowerInstance"}
                         else
                             serializedArgs[k] = v
                         end
@@ -573,6 +575,8 @@ loadMacro = function(macroName)
                     for k, v in pairs(act.Args) do
                         if type(v) == "table" and v.__type == "Vector3" then
                             deserializedArgs[k] = Vector3.new(v.X, v.Y, v.Z)
+                        elseif type(v) == "table" and v.__type == "TowerInstance" then
+                            deserializedArgs[k] = "__TOWER_INSTANCE__"
                         else
                             deserializedArgs[k] = v
                         end
@@ -658,7 +662,7 @@ startPlayback = function()
                             return true
                         end
                     elseif action.Type == "Upgrade" or action.Type == "Sell" then
-                        -- PENCARIAN BERDASARKAN INDEX TOWER YANG DIIKAT SECARA KETAT (Mencegah tertukar antar tower berdekatan)
+                        -- AMBIL POSISI BERDASARKAN TOWER INDEX YANG TEPAT
                         local targetPos = recordedPlacePositions[action.TowerIndex]
                         if not targetPos then
                             for _, act in ipairs(recordedActions) do
@@ -674,12 +678,12 @@ startPlayback = function()
                         if targetPos then
                             local minDst = math.huge
                             for _, obj in ipairs(workspace:GetDescendants()) do
-                                if obj:IsA("Model") or obj:IsA("BasePart") then
+                                if obj:IsA("Model") then
                                     local pos = getModelPosition(obj)
                                     if pos then
                                         local dist = (pos - targetPos).Magnitude
-                                        -- Menggunakan radius ketat khusus untuk tower index ini agar tidak salah sasaran ke tower sebelah
-                                        if dist < 6 and dist < minDst then
+                                        -- Radius ketat 5 stud agar tidak salah sasaran ke tower sebelah
+                                        if dist < 5 and dist < minDst then
                                             minDst = dist
                                             targetObj = obj
                                         end
@@ -695,7 +699,7 @@ startPlayback = function()
                                     playArgs[k] = v
                                 end
                                 for k, v in pairs(playArgs) do
-                                    if typeof(v) == "Instance" then
+                                    if v == "__TOWER_INSTANCE__" or typeof(v) == "Instance" then
                                         playArgs[k] = targetObj
                                     end
                                 end
