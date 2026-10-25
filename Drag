@@ -1,5 +1,5 @@
 -- ==========================================================
--- TOWER DEFENSE MACRO SCRIPT (AUTO PLAY MATCH & PERSISTENT CONFIG)
+-- TOWER DEFENSE MACRO SCRIPT (VERSION 2.1 - FULL FEATURES)
 -- Designed for Mobile / Delta Executor (Android)
 -- ==========================================================
 
@@ -34,11 +34,11 @@ local corner = Instance.new("UICorner")
 corner.CornerRadius = UDim.new(0, 12)
 corner.Parent = mainFrame
 
--- Title
+-- Title dengan Versi
 local title = Instance.new("TextLabel")
 title.Size = UDim2.new(1, -40, 0, 40)
 title.BackgroundTransparency = 1
-title.Text = "  Tower Macro Pro"
+title.Text = "  Tower Macro Pro v2.1"
 title.TextColor3 = Color3.fromRGB(255, 255, 255)
 title.TextSize = 14
 title.Font = Enum.Font.GothamBold
@@ -226,7 +226,7 @@ local function logMessage(msg, color)
     end)
 end
 
-logMessage("Macro Script Loaded. Ready.", Color3.fromRGB(100, 200, 255))
+logMessage("Tower Macro Pro v2.1 Loaded. Ready.", Color3.fromRGB(100, 200, 255))
 
 -- ==================== MINIMIZE LOGIC (AUTO MINIMIZED AWAL) ====================
 local isMinimized = true 
@@ -346,15 +346,17 @@ local function getModelPosition(obj)
     return nil
 end
 
+-- ==================== FORWARD DECLARATION ====================
+local startPlayback
+local loadMacro
+
 -- ==================== MACRO ENGINE (SUCCESS-ONLY) ====================
 local recordedActions = {}
 local recordedPlacePositions = {} 
 local placedTowersCount = 0
 local isRecording = false
 local isPlaying = false
-
--- Forward declaration untuk fungsi startPlayback
-local startPlayback
+local lastAutoPlayTime = 0
 
 -- Intercept Remote Calls dengan Verifikasi Sukses & Deteksi Match Baru
 local oldNamecall
@@ -366,16 +368,22 @@ oldNamecall = hookmetamethod(game, "__namecall", function(self, ...)
     local success = res[1]
     local serverResult = res[2]
     
-    -- Deteksi jika match baru dimulai (misal remote StartMatch dipanggil)
+    -- Deteksi jika match baru dimulai melalui StartMatch (dengan debounce 15 detik)
     if tostring(self.Name) == "StartMatch" and (method == "FireServer" or method == "InvokeServer") then
         if autoPlayMatchEnabled and not isPlaying and not isRecording then
-            task.spawn(function()
-                task.wait(1.5) -- Beri waktu sebentar untuk loading map/game baru
-                local macroName = nameBox.Text ~= "" and nameBox.Text or "makro_1"
-                logMessage("Match baru terdeteksi! Memuat makro: " .. macroName, Color3.fromRGB(100, 200, 255))
-                -- Panggil fungsi load & play secara otomatis
-                -- (Akan didefinisikan di bawah)
-            end)
+            local currentTime = tick()
+            if currentTime - lastAutoPlayTime > 15 then
+                lastAutoPlayTime = currentTime
+                task.spawn(function()
+                    task.wait(2) -- Beri waktu sebentar untuk loading map baru
+                    local macroName = nameBox.Text ~= "" and nameBox.Text or "makro_1"
+                    logMessage("Match baru terdeteksi! Memuat makro: " .. macroName, Color3.fromRGB(100, 200, 255))
+                    if loadMacro(macroName) then
+                        task.wait(1)
+                        startPlayback()
+                    end
+                end)
+            end
         end
     end
     
@@ -536,14 +544,14 @@ local function saveMacro()
             writefile("TowerMacro_" .. macroName .. ".json", jsonString)
             
             saveConfig()
-            logMessage("Berhasil menyimpan makro & config: " + macroName, Color3.fromRGB(100, 255, 150))
+            logMessage("Berhasil menyimpan makro & config: " .. macroName, Color3.fromRGB(100, 255, 150))
         else
             logMessage("Executor tidak mendukung writefile!", Color3.fromRGB(255, 100, 100))
         end
     end)
 end
 
-local function loadMacro(macroName)
+loadMacro = function(macroName)
     local success, result = pcall(function()
         if readfile and isfile and isfile("TowerMacro_" .. macroName .. ".json") then
             local jsonString = readfile("TowerMacro_" .. macroName .. ".json")
@@ -734,26 +742,6 @@ startPlayback = function()
     end)
 end
 
--- Hook fungsi match baru untuk memicu auto play saat match dimulai / Play Again
-local function setupMatchDetection()
-    task.spawn(function()
-        while true do
-            task.wait(1)
-            pcall(function()
-                if autoPlayMatchEnabled and not isPlaying and not isRecording then
-                    -- Cek jika tombol StartMatch dipicu atau game mendeteksi match dimulai
-                    -- Di sini kita integrasikan dengan deteksi pemanggilan remote StartMatch di namecall hook
-                end
-            end)
-        end
-    end)
-end
-
--- Update fungsi remote intercept untuk memicu Auto Play saat StartMatch terdeteksi
-local oldNamecallRef = oldNamecall
--- Kita buat trigger langsung di dalam namecall utama di atas ketika StartMatch dipanggil:
--- (Sudah ditambahkan di dalam namecall hook di atas: memuat makro dan menjalankan startPlayback setelah jeda singkat)
-
 -- ==================== BUTTON EVENTS ====================
 saveBtn.MouseButton1Click:Connect(function()
     saveMacro()
@@ -825,6 +813,3 @@ task.spawn(function()
         end
     end)
 end)
-
--- Tambahan listener di dalam namecall untuk auto play saat StartMatch terpanggil
-local originalStartMatchHandler = nil
