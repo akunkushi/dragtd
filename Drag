@@ -1,5 +1,5 @@
 -- ==========================================================
--- TOWER DEFENSE MACRO SCRIPT (VERSION 4.6 - DIRECT SPATIAL MAPPING)
+-- TOWER DEFENSE MACRO SCRIPT (VERSION 4.7 - INSTANCE LOCKING & FAST SYNC)
 -- Designed for Mobile / Delta Executor (Android)
 -- ==========================================================
 
@@ -38,7 +38,7 @@ corner.Parent = mainFrame
 local title = Instance.new("TextLabel")
 title.Size = UDim2.new(1, -40, 0, 40)
 title.BackgroundTransparency = 1
-title.Text = "  Tower Macro Pro v4.6"
+title.Text = "  Tower Macro Pro v4.7"
 title.TextColor3 = Color3.fromRGB(255, 255, 255)
 title.TextSize = 14
 title.Font = Enum.Font.GothamBold
@@ -220,7 +220,7 @@ local function logMessage(msg, color)
     end)
 end
 
-logMessage("Tower Macro Pro v4.6 Loaded. Ready.", Color3.fromRGB(100, 200, 255))
+logMessage("Tower Macro Pro v4.7 Loaded. Ready.", Color3.fromRGB(100, 200, 255))
 
 local isMinimized = true 
 minimizeBtn.MouseButton1Click:Connect(function()
@@ -646,28 +646,48 @@ startPlayback = function()
                     if not remote then return false end
 
                     if action.Type == "Place" then
-                        local placeRes
+                        local towerName = tostring(action.Args[1]) or ""
+                        
                         if action.Method == "InvokeServer" then
-                            placeRes = remote:InvokeServer(unpack(action.Args))
+                            remote:InvokeServer(unpack(action.Args))
                         else
                             remote:FireServer(unpack(action.Args))
-                            placeRes = true
                         end
                         
-                        -- Beri jeda render
-                        task.wait(0.5)
-                        
-                        -- Pindai langsung objek terdekat di workspace berdasarkan posisi penempatan
+                        -- Cari model tower yang baru muncul berdasarkan nama atau posisi terdekat
                         local placedObj = nil
-                        local targetPos = action.Position
-                        if targetPos then
+                        local startTime = tick()
+                        while tick() - startTime < 2 and not placedObj do
+                            for _, obj in ipairs(workspace:GetDescendants()) do
+                                if obj:IsA("Model") and obj.Parent ~= nil then
+                                    if towerName ~= "" and string.find(obj.Name:lower(), towerName:lower()) then
+                                        local pos = getModelPosition(obj)
+                                        if pos and action.Position then
+                                            if (pos - action.Position).Magnitude < 15 then
+                                                placedObj = obj
+                                                break
+                                            end
+                                        else
+                                            placedObj = obj
+                                            break
+                                        end
+                                    end
+                                end
+                            end
+                            if not placedObj then
+                                task.wait(0.1)
+                            end
+                        end
+                        
+                        -- Fallback cari model terdekat jika nama tidak cocok persis
+                        if not placedObj and action.Position then
                             local minDst = math.huge
                             for _, obj in ipairs(workspace:GetDescendants()) do
-                                if (obj:IsA("Model") or obj:IsA("BasePart")) and obj.Parent ~= nil then
+                                if obj:IsA("Model") and obj.Parent ~= nil then
                                     local pos = getModelPosition(obj)
                                     if pos then
-                                        local dist = (pos - targetPos).Magnitude
-                                        if dist < 15 and dist < minDst then
+                                        local dist = (pos - action.Position).Magnitude
+                                        if dist < 20 and dist < minDst then
                                             minDst = dist
                                             placedObj = obj
                                         end
@@ -677,15 +697,13 @@ startPlayback = function()
                         end
                         
                         if placedObj then
-                            if placedObj:IsA("BasePart") and placedObj.Parent and placedObj.Parent:IsA("Model") then
-                                placedObj = placedObj.Parent
-                            end
                             activeMatchTowers[action.TowerIndex] = placedObj
+                            return true
+                        else
+                            return false
                         end
-
-                        return placeRes
                     elseif action.Type == "Upgrade" or action.Type == "Sell" then
-                        -- Ambil referensi tower dari activeMatchTowers atau cari ulang di workspace
+                        -- Ambil tower dari instance yang sudah di-lock atau cari ulang di workspace
                         local targetObj = activeMatchTowers[action.TowerIndex]
                         
                         if not targetObj or not targetObj.Parent then
@@ -693,19 +711,16 @@ startPlayback = function()
                             if targetPos then
                                 local minDst = math.huge
                                 for _, obj in ipairs(workspace:GetDescendants()) do
-                                    if (obj:IsA("Model") or obj:IsA("BasePart")) and obj.Parent ~= nil then
+                                    if obj:IsA("Model") and obj.Parent ~= nil then
                                         local pos = getModelPosition(obj)
                                         if pos then
                                             local dist = (pos - targetPos).Magnitude
-                                            if dist < 20 and dist < minDst then
+                                            if dist < 25 and dist < minDst then
                                                 minDst = dist
                                                 targetObj = obj
                                             end
                                         end
                                     end
-                                end
-                                if targetObj and targetObj:IsA("BasePart") and targetObj.Parent and targetObj.Parent:IsA("Model") then
-                                    targetObj = targetObj.Parent
                                 end
                             end
                         end
@@ -797,7 +812,7 @@ task.spawn(function()
     task.wait(2)
     pcall(function()
         if isfile and isfile("TowerMacro_Config.json") then
-            local configStr = readfile("TowerMacro_Config.json")
+            configStr = readfile("TowerMacro_Config.json")
             local config = HttpService:JSONDecode(configStr)
             if config then
                 if config.AutoStart ~= nil then
