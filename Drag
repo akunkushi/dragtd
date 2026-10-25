@@ -1,5 +1,5 @@
 -- ==========================================================
--- TOWER DEFENSE MACRO SCRIPT (SUCCESS-ONLY RECORDING FIX)
+-- TOWER DEFENSE MACRO SCRIPT (PERSISTENT CONFIG & ALL FEATURES)
 -- Designed for Mobile / Delta Executor (Android)
 -- ==========================================================
 
@@ -261,14 +261,33 @@ local function updateToggleVisual(btn, state, name)
     end
 end
 
+-- Fungsi simpan konfigurasi ke file agar tersimpan saat rejoin
+local function saveConfig()
+    pcall(function()
+        if writefile then
+            local macroName = nameBox.Text ~= "" and nameBox.Text or "makro_1"
+            local configData = {
+                AutoStart = autoStartEnabled,
+                AutoSpeed = autoSpeedEnabled,
+                AutoSkip = autoSkipEnabled,
+                AutoRejoin = autoRejoinPlayEnabled,
+                MacroName = macroName
+            }
+            writefile("TowerMacro_Config.json", HttpService:JSONEncode(configData))
+        end
+    end)
+end
+
 autoStartBtn.MouseButton1Click:Connect(function()
     autoStartEnabled = not autoStartEnabled
     updateToggleVisual(autoStartBtn, autoStartEnabled, "Auto Start")
+    saveConfig()
 end)
 
 autoSpeedBtn.MouseButton1Click:Connect(function()
     autoSpeedEnabled = not autoSpeedEnabled
     updateToggleVisual(autoSpeedBtn, autoSpeedEnabled, "Auto x2 Speed")
+    saveConfig()
     if autoSpeedEnabled then
         pcall(function()
             ReplicatedStorage.Remotes.SetSpeed:FireServer(2)
@@ -279,6 +298,7 @@ end)
 autoSkipBtn.MouseButton1Click:Connect(function()
     autoSkipEnabled = not autoSkipEnabled
     updateToggleVisual(autoSkipBtn, autoSkipEnabled, "Auto Skip")
+    saveConfig()
     if autoSkipEnabled then
         pcall(function()
             ReplicatedStorage.Remotes.SetAutoSkip:FireServer(true)
@@ -289,6 +309,7 @@ end)
 autoRejoinPlayBtn.MouseButton1Click:Connect(function()
     autoRejoinPlayEnabled = not autoRejoinPlayEnabled
     updateToggleVisual(autoRejoinPlayBtn, autoRejoinPlayEnabled, "Rejoin Play")
+    saveConfig()
 end)
 
 -- Loop background untuk Auto Start, Auto Speed, dan Auto Skip
@@ -338,13 +359,11 @@ oldNamecall = hookmetamethod(game, "__namecall", function(self, ...)
     local method = getnamecallmethod()
     local args = {...}
     
-    -- Eksekusi remote asli terlebih dahulu untuk mengecek apakah berhasil atau gagal
     local res = {pcall(oldNamecall, self, unpack(args))}
     local success = res[1]
     local serverResult = res[2]
     
     if isRecording and (method == "InvokeServer" or method == "FireServer") then
-        -- HANYA CATAT JIKA BERHASIL DAN SERVER TIDAK MENGEMBALIKAN FALSE (GAGAL)
         if success and serverResult ~= false then
             local remote = self
             local m = method
@@ -357,7 +376,6 @@ oldNamecall = hookmetamethod(game, "__namecall", function(self, ...)
                 pcall(function()
                     local remoteName = tostring(remote.Name):lower()
                     
-                    -- 1. Deteksi Place Tower
                     local hasVector3 = false
                     local hasString = false
                     for _, arg in ipairs(capturedArgs) do
@@ -394,7 +412,6 @@ oldNamecall = hookmetamethod(game, "__namecall", function(self, ...)
                         return
                     end
                     
-                    -- 2. Deteksi Upgrade / Sell Tower
                     local actionType = nil
                     if string.match(remoteName, "sell") or string.match(remoteName, "remove") or string.match(remoteName, "delete") then
                         actionType = "Sell"
@@ -502,13 +519,8 @@ local function saveMacro()
             local jsonString = HttpService:JSONEncode(dataToSave)
             writefile("TowerMacro_" .. macroName .. ".json", jsonString)
             
-            local configData = {
-                AutoRejoin = autoRejoinPlayEnabled,
-                MacroName = macroName
-            }
-            writefile("TowerMacro_Config.json", HttpService:JSONEncode(configData))
-            
-            logMessage("Berhasil menyimpan makro: " .. macroName, Color3.fromRGB(100, 255, 150))
+            saveConfig()
+            logMessage("Berhasil menyimpan makro & config: " .. macroName, Color3.fromRGB(100, 255, 150))
         else
             logMessage("Executor tidak mendukung writefile!", Color3.fromRGB(255, 100, 100))
         end
@@ -742,19 +754,45 @@ playBtn.MouseButton1Click:Connect(function()
     startPlayback()
 end)
 
--- ==================== AUTO CHECK REJOIN PLAY ON STARTUP ====================
+-- ==================== LOAD CONFIG & REJOIN PLAY ON STARTUP ====================
 task.spawn(function()
     task.wait(2)
     pcall(function()
         if isfile and isfile("TowerMacro_Config.json") then
             local configStr = readfile("TowerMacro_Config.json")
             local config = HttpService:JSONDecode(configStr)
-            if config and config.AutoRejoin and config.MacroName then
-                nameBox.Text = config.MacroName
-                logMessage("Mendeteksi Auto Rejoin Play untuk: " + config.MacroName, Color3.fromRGB(100, 200, 255))
-                if loadMacro(config.MacroName) then
-                    task.wait(1)
-                    startPlayback()
+            if config then
+                -- Pulihkan status tombol toggle
+                if config.AutoStart ~= nil then
+                    autoStartEnabled = config.AutoStart
+                    updateToggleVisual(autoStartBtn, autoStartEnabled, "Auto Start")
+                end
+                if config.AutoSpeed ~= nil then
+                    autoSpeedEnabled = config.AutoSpeed
+                    updateToggleVisual(autoSpeedBtn, autoSpeedEnabled, "Auto x2 Speed")
+                end
+                if config.AutoSkip ~= nil then
+                    autoSkipEnabled = config.AutoSkip
+                    updateToggleVisual(autoSkipBtn, autoSkipEnabled, "Auto Skip")
+                end
+                if config.AutoRejoin ~= nil then
+                    autoRejoinPlayEnabled = config.AutoRejoin
+                    updateToggleVisual(autoRejoinPlayBtn, autoRejoinPlayEnabled, "Rejoin Play")
+                end
+                
+                if config.MacroName then
+                    nameBox.Text = config.MacroName
+                end
+
+                logMessage("Konfigurasi sebelumnya berhasil dimuat!", Color3.fromRGB(100, 200, 255))
+
+                -- Jika Rejoin Play aktif, jalankan makro secara otomatis
+                if config.AutoRejoin and config.MacroName then
+                    logMessage("Mendeteksi Auto Rejoin Play untuk: " .. config.MacroName, Color3.fromRGB(100, 200, 255))
+                    if loadMacro(config.MacroName) then
+                        task.wait(1)
+                        startPlayback()
+                    end
                 end
             end
         end
