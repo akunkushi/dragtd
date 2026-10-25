@@ -1,5 +1,5 @@
 -- ==========================================================
--- TOWER DEFENSE MACRO SCRIPT (VERSION 2.2 - FIX PLAYBACK & RESET)
+-- TOWER DEFENSE MACRO SCRIPT (VERSION 2.4 - WAVE 1 AUTO PLAY)
 -- Designed for Mobile / Delta Executor (Android)
 -- ==========================================================
 
@@ -38,7 +38,7 @@ corner.Parent = mainFrame
 local title = Instance.new("TextLabel")
 title.Size = UDim2.new(1, -40, 0, 40)
 title.BackgroundTransparency = 1
-title.Text = "  Tower Macro Pro v2.2"
+title.Text = "  Tower Macro Pro v2.4"
 title.TextColor3 = Color3.fromRGB(255, 255, 255)
 title.TextSize = 14
 title.Font = Enum.Font.GothamBold
@@ -226,7 +226,7 @@ local function logMessage(msg, color)
     end)
 end
 
-logMessage("Tower Macro Pro v2.2 Loaded. Ready.", Color3.fromRGB(100, 200, 255))
+logMessage("Tower Macro Pro v2.4 Loaded. Ready.", Color3.fromRGB(100, 200, 255))
 
 -- ==================== MINIMIZE LOGIC (AUTO MINIMIZED AWAL) ====================
 local isMinimized = true 
@@ -351,9 +351,8 @@ local recordedPlacePositions = {}
 local placedTowersCount = 0
 local isRecording = false
 local isPlaying = false
-local lastAutoPlayTime = 0
 
--- Intercept Remote Calls dengan Verifikasi Sukses & Deteksi Match Baru
+-- Intercept Remote Calls (Hanya untuk Record Sukses)
 local oldNamecall
 oldNamecall = hookmetamethod(game, "__namecall", function(self, ...)
     local method = getnamecallmethod()
@@ -362,26 +361,6 @@ oldNamecall = hookmetamethod(game, "__namecall", function(self, ...)
     local res = {pcall(oldNamecall, self, unpack(args))}
     local success = res[1]
     local serverResult = res[2]
-    
-    -- Deteksi jika match baru dimulai melalui StartMatch (dengan debounce 10 detik dan reset total play state)
-    if tostring(self.Name) == "StartMatch" and (method == "FireServer" or method == "InvokeServer") then
-        if autoPlayMatchEnabled and not isRecording then
-            local currentTime = tick()
-            if currentTime - lastAutoPlayTime > 10 then
-                lastAutoPlayTime = currentTime
-                task.spawn(function()
-                    isPlaying = false -- Paksa hentikan status play sebelumnya agar reset bersih
-                    task.wait(2.5) -- Tunggu map baru selesai dimuat
-                    local macroName = nameBox.Text ~= "" and nameBox.Text or "makro_1"
-                    logMessage("Match baru terdeteksi! Memuat makro: " .. macroName, Color3.fromRGB(100, 200, 255))
-                    if loadMacro(macroName) then
-                        task.wait(1)
-                        startPlayback()
-                    end
-                end)
-            end
-        end
-    end
     
     if isRecording and (method == "InvokeServer" or method == "FireServer") then
         if success and serverResult ~= false then
@@ -659,7 +638,6 @@ startPlayback = function()
 
                         if targetPos then
                             local minDst = math.huge
-                            -- Perluas toleransi radius pencarian objek model di game baru (menjadi 10 stud)
                             for _, obj in ipairs(workspace:GetDescendants()) do
                                 if obj:IsA("Model") then
                                     local pos = getModelPosition(obj)
@@ -720,6 +698,41 @@ startPlayback = function()
         logMessage("Playback selesai!", Color3.fromRGB(100, 255, 150))
     end)
 end
+
+-- ==================== AUTO PLAY DETECTOR (WAVE 1 ONLY) ====================
+task.spawn(function()
+    local lastWave1Detected = 0
+    while true do
+        task.wait(1)
+        pcall(function()
+            if autoPlayMatchEnabled and not isPlaying and not isRecording then
+                -- Pindai PlayerGui untuk mencari teks "Wave 1"
+                for _, desc in ipairs(playerGui:GetDescendants()) do
+                    if desc:IsA("TextLabel") and desc.Visible then
+                        local txt = desc.Text:lower()
+                        -- Hanya mendeteksi Wave 1 secara spesifik (mengabaikan Wave 2, 3, dst)
+                        if txt:find("wave 1") or txt:find("wave: 1") or txt == "1" then
+                            local currentTime = tick()
+                            -- Debounce 60 detik agar tidak memicu ulang di wave 1 yang sama
+                            if currentTime - lastWave1Detected > 60 then
+                                lastWave1Detected = currentTime
+                                isPlaying = false -- Reset status play sebelumnya
+                                logMessage("Wave 1 terdeteksi! Memulai makro...", Color3.fromRGB(100, 200, 255))
+                                task.wait(1.5)
+                                local macroName = nameBox.Text ~= "" and nameBox.Text or "makro_1"
+                                if loadMacro(macroName) then
+                                    task.wait(1)
+                                    startPlayback()
+                                end
+                                break
+                            end
+                        end
+                    end
+                end
+            end
+        end)
+    end
+end)
 
 -- ==================== BUTTON EVENTS ====================
 saveBtn.MouseButton1Click:Connect(function()
