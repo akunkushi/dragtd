@@ -1,5 +1,5 @@
 -- ==========================================================
--- TOWER DEFENSE MACRO SCRIPT (VERSION 3.0 - AUTO START MATCH TRIGGER)
+-- TOWER DEFENSE MACRO SCRIPT (VERSION 3.2 - STRICT AUTO PLAY CYCLE)
 -- Designed for Mobile / Delta Executor (Android)
 -- ==========================================================
 
@@ -38,7 +38,7 @@ corner.Parent = mainFrame
 local title = Instance.new("TextLabel")
 title.Size = UDim2.new(1, -40, 0, 40)
 title.BackgroundTransparency = 1
-title.Text = "  Tower Macro Pro v3.0"
+title.Text = "  Tower Macro Pro v3.2"
 title.TextColor3 = Color3.fromRGB(255, 255, 255)
 title.TextSize = 14
 title.Font = Enum.Font.GothamBold
@@ -226,7 +226,7 @@ local function logMessage(msg, color)
     end)
 end
 
-logMessage("Tower Macro Pro v3.0 Loaded. Ready.", Color3.fromRGB(100, 200, 255))
+logMessage("Tower Macro Pro v3.2 Loaded. Ready.", Color3.fromRGB(100, 200, 255))
 
 -- ==================== MINIMIZE LOGIC (AUTO MINIMIZED AWAL) ====================
 local isMinimized = true 
@@ -351,9 +351,9 @@ local recordedPlacePositions = {}
 local placedTowersCount = 0
 local isRecording = false
 local isPlaying = false
-local lastStartMatchTime = 0
+local waitingForNextAutoPlay = true -- Status siap menunggu tugas Auto Play Match berikutnya
 
--- Intercept Remote Calls (Mendeteksi StartMatch & Record Sukses)
+-- Intercept Remote Calls (Auto Play Match Execution Trigger)
 local oldNamecall
 oldNamecall = hookmetamethod(game, "__namecall", function(self, ...)
     local method = getnamecallmethod()
@@ -363,28 +363,21 @@ oldNamecall = hookmetamethod(game, "__namecall", function(self, ...)
     local success = res[1]
     local serverResult = res[2]
     
-    -- DETEKSI START MATCH: Memulai ulang makro secara otomatis ketika StartMatch dipanggil (misal setelah auto start match / play again)
+    -- TUGAS AUTO PLAY MATCH: Menangkap sinyal StartMatch saat fitur ini aktif dan siap
     if tostring(self.Name) == "StartMatch" and (method == "FireServer" or method == "InvokeServer") then
-        if autoPlayMatchEnabled and not isRecording then
-            local currentTime = tick()
-            -- Debounce 30 detik agar tidak memicu ulang beruntun dalam satu match
-            if currentTime - lastStartMatchTime > 30 then
-                lastStartMatchTime = currentTime
-                task.spawn(function()
-                    -- FORCE RESET: Hentikan playback lama yang mungkin masih menyangkut
-                    isPlaying = false
+        if autoPlayMatchEnabled and waitingForNextAutoPlay and not isRecording then
+            waitingForNextAutoPlay = false -- Kunci langsung agar tidak bisa trigger lagi selama match ini berjalan
+            task.spawn(function()
+                isPlaying = false
+                logMessage("Auto Play Match menjalankan tugasnya! Memulai pemutaran makro...", Color3.fromRGB(100, 200, 255))
+                task.wait(2.5) -- Jeda loading match baru
+                
+                local macroName = nameBox.Text ~= "" and nameBox.Text or "makro_1"
+                if loadMacro(macroName) then
                     task.wait(1)
-                    
-                    logMessage("StartMatch terdeteksi! Memulai ulang makro...", Color3.fromRGB(100, 200, 255))
-                    task.wait(2) -- Beri jeda waktu loading map/match baru
-                    
-                    local macroName = nameBox.Text ~= "" and nameBox.Text or "makro_1"
-                    if loadMacro(macroName) then
-                        task.wait(1)
-                        startPlayback()
-                    end
-                end)
-            end
+                    startPlayback()
+                end
+            end)
         end
     end
     
@@ -719,9 +712,10 @@ startPlayback = function()
         end
 
         isPlaying = false
+        waitingForNextAutoPlay = true -- Buka kembali izin tugas Auto Play Match untuk match berikutnya setelah playback selesai total
         playBtn.BackgroundColor3 = Color3.fromRGB(50, 200, 90)
         playBtn.Text = "Play"
-        logMessage("Playback selesai!", Color3.fromRGB(100, 255, 150))
+        logMessage("Playback selesai! Menunggu tugas Auto Play Match berikutnya...", Color3.fromRGB(100, 255, 150))
     end)
 end
 
