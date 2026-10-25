@@ -1,5 +1,5 @@
 -- ==========================================================
--- TOWER DEFENSE MACRO SCRIPT (VERSION 3.9 - FORCE RESTART & ACTIVE TOWER FILTER)
+-- TOWER DEFENSE MACRO SCRIPT (VERSION 4.0 - ROBUST MATCH SYNC & TOWER FINDER)
 -- Designed for Mobile / Delta Executor (Android)
 -- ==========================================================
 
@@ -38,7 +38,7 @@ corner.Parent = mainFrame
 local title = Instance.new("TextLabel")
 title.Size = UDim2.new(1, -40, 0, 40)
 title.BackgroundTransparency = 1
-title.Text = "  Tower Macro Pro v3.9"
+title.Text = "  Tower Macro Pro v4.0"
 title.TextColor3 = Color3.fromRGB(255, 255, 255)
 title.TextSize = 14
 title.Font = Enum.Font.GothamBold
@@ -226,7 +226,7 @@ local function logMessage(msg, color)
     end)
 end
 
-logMessage("Tower Macro Pro v3.9 Loaded. Ready.", Color3.fromRGB(100, 200, 255))
+logMessage("Tower Macro Pro v4.0 Loaded. Ready.", Color3.fromRGB(100, 200, 255))
 
 -- ==================== MINIMIZE LOGIC (AUTO MINIMIZED AWAL) ====================
 local isMinimized = true 
@@ -677,15 +677,24 @@ startPlayback = function()
                         if targetPos then
                             local minDst = math.huge
                             for _, obj in ipairs(workspace:GetDescendants()) do
-                                -- FILTER: Pastikan objek adalah Model/BasePart DAN AKTIF (Parent tidak nil / bukan sisa match lama)
-                                if (obj:IsA("Model") or obj:IsA("BasePart")) and obj.Parent ~= nil then
-                                    local pos = getModelPosition(obj)
+                                -- FILTER: Pastikan objek adalah Model dan AKTIF di match baru (Parent tidak nil)
+                                if obj:IsA("Model") and obj.Parent ~= nil then
+                                    -- Cari root model utama di bawah workspace atau folder unit/tower
+                                    local rootModel = obj
+                                    while rootModel.Parent and rootModel.Parent ~= workspace and not rootModel.Parent:IsA("Workspace") do
+                                        if rootModel.Parent.Name == "Towers" or rootModel.Parent.Name == "Units" or rootModel.Parent.Name == "TowersFolder" or rootModel.Parent:IsA("Folder") then
+                                            break
+                                        end
+                                        rootModel = rootModel.Parent
+                                    end
+
+                                    local pos = getModelPosition(rootModel)
                                     if pos then
                                         local dist = (pos - targetPos).Magnitude
-                                        -- Radius ketat 5 stud agar akurat dan tidak salah sasaran ke tower sebelah
-                                        if dist < 5 and dist < minDst then
+                                        -- Radius ketat 6 stud untuk akurasi tinggi pada tower berdekatan
+                                        if dist < 6 and dist < minDst then
                                             minDst = dist
-                                            targetObj = obj
+                                            targetObj = rootModel
                                         end
                                     end
                                 end
