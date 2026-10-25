@@ -1,5 +1,5 @@
 -- ==========================================================
--- TOWER DEFENSE MACRO SCRIPT (DRAGGABLE UI & ALL FEATURES)
+-- TOWER DEFENSE MACRO SCRIPT (SUCCESS-ONLY RECORDING FIX)
 -- Designed for Mobile / Delta Executor (Android)
 -- ==========================================================
 
@@ -325,129 +325,140 @@ local function getModelPosition(obj)
     return nil
 end
 
--- ==================== MACRO ENGINE ====================
+-- ==================== MACRO ENGINE (SUCCESS-ONLY) ====================
 local recordedActions = {}
 local recordedPlacePositions = {} 
 local placedTowersCount = 0
 local isRecording = false
 local isPlaying = false
 
--- Intercept Remote Calls safely
+-- Intercept Remote Calls dengan Verifikasi Sukses
 local oldNamecall
 oldNamecall = hookmetamethod(game, "__namecall", function(self, ...)
     local method = getnamecallmethod()
     local args = {...}
     
+    -- Eksekusi remote asli terlebih dahulu untuk mengecek apakah berhasil atau gagal
+    local res = {pcall(oldNamecall, self, unpack(args))}
+    local success = res[1]
+    local serverResult = res[2]
+    
     if isRecording and (method == "InvokeServer" or method == "FireServer") then
-        local remote = self
-        local m = method
-        local capturedArgs = {}
-        for k, v in pairs(args) do
-            capturedArgs[k] = v
-        end
-        
-        task.spawn(function()
-            pcall(function()
-                local remoteName = tostring(remote.Name):lower()
-                
-                -- 1. Deteksi Place Tower
-                local hasVector3 = false
-                local hasString = false
-                for _, arg in ipairs(capturedArgs) do
-                    if typeof(arg) == "Vector3" then hasVector3 = true end
-                    if typeof(arg) == "string" then hasString = true end
-                end
-                
-                if hasVector3 and hasString then
-                    placedTowersCount = placedTowersCount + 1
-                    local currentTowerIndex = placedTowersCount
+        -- HANYA CATAT JIKA BERHASIL DAN SERVER TIDAK MENGEMBALIKAN FALSE (GAGAL)
+        if success and serverResult ~= false then
+            local remote = self
+            local m = method
+            local capturedArgs = {}
+            for k, v in pairs(args) do
+                capturedArgs[k] = v
+            end
+            
+            task.spawn(function()
+                pcall(function()
+                    local remoteName = tostring(remote.Name):lower()
                     
-                    local placePos = nil
+                    -- 1. Deteksi Place Tower
+                    local hasVector3 = false
+                    local hasString = false
                     for _, arg in ipairs(capturedArgs) do
-                        if typeof(arg) == "Vector3" then
-                            placePos = arg
-                            break
-                        end
+                        if typeof(arg) == "Vector3" then hasVector3 = true end
+                        if typeof(arg) == "string" then hasString = true end
                     end
                     
-                    recordedPlacePositions[currentTowerIndex] = placePos
-                    
-                    table.insert(recordedActions, {
-                        Type = "Place",
-                        TowerIndex = currentTowerIndex,
-                        RemoteName = remote.Name,
-                        Method = m,
-                        Args = capturedArgs,
-                        Position = placePos
-                    })
-                    
-                    local towerName = tostring(capturedArgs[1]) or "Unknown"
-                    local posStr = placePos and string.format("(%.1f, %.1f, %.1f)", placePos.X, placePos.Y, placePos.Z) or "Vector3"
-                    logMessage(string.format("[RECORD] place tower #%d [%s] at %s", currentTowerIndex, towerName, posStr), Color3.fromRGB(255, 200, 100))
-                    return
-                end
-                
-                -- 2. Deteksi Upgrade / Sell Tower
-                local actionType = nil
-                if string.match(remoteName, "sell") or string.match(remoteName, "remove") or string.match(remoteName, "delete") then
-                    actionType = "Sell"
-                elseif string.match(remoteName, "upgrade") or string.match(remoteName, "level") or string.match(remoteName, "up") then
-                    actionType = "Upgrade"
-                end
-                
-                if actionType then
-                    local targetInstance = nil
-                    for _, arg in ipairs(capturedArgs) do
-                        if typeof(arg) == "Instance" then
-                            targetInstance = arg
-                            break
-                        end
-                    end
-                    
-                    if targetInstance and not targetInstance:IsA("Model") then
-                        local modelParent = targetInstance:FindFirstAncestorOfClass("Model")
-                        if modelParent then
-                            targetInstance = modelParent
-                        end
-                    end
-                    
-                    local matchedIndex = 1
-                    local objName = "Unknown"
-                    
-                    if targetInstance then
-                        pcall(function()
-                            objName = targetInstance.Name
-                        end)
+                    if hasVector3 and hasString then
+                        placedTowersCount = placedTowersCount + 1
+                        local currentTowerIndex = placedTowersCount
                         
-                        local targetPos = getModelPosition(targetInstance)
-                        if targetPos then
-                            local minDistance = math.huge
-                            for idx, pos in pairs(recordedPlacePositions) do
-                                local dist = (pos - targetPos).Magnitude
-                                if dist < minDistance then
-                                    minDistance = dist
-                                    matchedIndex = idx
+                        local placePos = nil
+                        for _, arg in ipairs(capturedArgs) do
+                            if typeof(arg) == "Vector3" then
+                                placePos = arg
+                                break
+                            end
+                        end
+                        
+                        recordedPlacePositions[currentTowerIndex] = placePos
+                        
+                        table.insert(recordedActions, {
+                            Type = "Place",
+                            TowerIndex = currentTowerIndex,
+                            RemoteName = remote.Name,
+                            Method = m,
+                            Args = capturedArgs,
+                            Position = placePos
+                        })
+                        
+                        local towerName = tostring(capturedArgs[1]) or "Unknown"
+                        local posStr = placePos and string.format("(%.1f, %.1f, %.1f)", placePos.X, placePos.Y, placePos.Z) or "Vector3"
+                        logMessage(string.format("[RECORD] place tower #%d [%s] at %s", currentTowerIndex, towerName, posStr), Color3.fromRGB(255, 200, 100))
+                        return
+                    end
+                    
+                    -- 2. Deteksi Upgrade / Sell Tower
+                    local actionType = nil
+                    if string.match(remoteName, "sell") or string.match(remoteName, "remove") or string.match(remoteName, "delete") then
+                        actionType = "Sell"
+                    elseif string.match(remoteName, "upgrade") or string.match(remoteName, "level") or string.match(remoteName, "up") then
+                        actionType = "Upgrade"
+                    end
+                    
+                    if actionType then
+                        local targetInstance = nil
+                        for _, arg in ipairs(capturedArgs) do
+                            if typeof(arg) == "Instance" then
+                                targetInstance = arg
+                                break
+                            end
+                        end
+                        
+                        if targetInstance and not targetInstance:IsA("Model") then
+                            local modelParent = targetInstance:FindFirstAncestorOfClass("Model")
+                            if modelParent then
+                                targetInstance = modelParent
+                            end
+                        end
+                        
+                        local matchedIndex = 1
+                        local objName = "Unknown"
+                        
+                        if targetInstance then
+                            pcall(function()
+                                objName = targetInstance.Name
+                            end)
+                            
+                            local targetPos = getModelPosition(targetInstance)
+                            if targetPos then
+                                local minDistance = math.huge
+                                for idx, pos in pairs(recordedPlacePositions) do
+                                    local dist = (pos - targetPos).Magnitude
+                                    if dist < minDistance then
+                                        minDistance = dist
+                                        matchedIndex = idx
+                                    end
                                 end
                             end
                         end
+                        
+                        table.insert(recordedActions, {
+                            Type = actionType,
+                            TowerIndex = matchedIndex,
+                            RemoteName = remote.Name,
+                            Method = m,
+                            ObjectName = objName,
+                            Args = capturedArgs
+                        })
+                        
+                        logMessage(string.format("[RECORD] %s tower #%d [%s] (Target: Tower #%d)", actionType:lower(), #recordedActions, objName, matchedIndex), Color3.fromRGB(255, 200, 100))
                     end
-                    
-                    table.insert(recordedActions, {
-                        Type = actionType,
-                        TowerIndex = matchedIndex,
-                        RemoteName = remote.Name,
-                        Method = m,
-                        ObjectName = objName,
-                        Args = capturedArgs
-                    })
-                    
-                    logMessage(string.format("[RECORD] %s tower #%d [%s] (Target: Tower #%d)", actionType:lower(), #recordedActions, objName, matchedIndex), Color3.fromRGB(255, 200, 100))
-                end
+                end)
             end)
-        end)
+        end
     end
     
-    return oldNamecall(self, ...)
+    if not res[1] then
+        error(res[2])
+    end
+    return unpack(res, 2)
 end)
 
 -- ==================== SAVE & LOAD FUNCTIONS ====================
@@ -740,7 +751,7 @@ task.spawn(function()
             local config = HttpService:JSONDecode(configStr)
             if config and config.AutoRejoin and config.MacroName then
                 nameBox.Text = config.MacroName
-                logMessage("Mendeteksi Auto Rejoin Play untuk: " .. config.MacroName, Color3.fromRGB(100, 200, 255))
+                logMessage("Mendeteksi Auto Rejoin Play untuk: " + config.MacroName, Color3.fromRGB(100, 200, 255))
                 if loadMacro(config.MacroName) then
                     task.wait(1)
                     startPlayback()
