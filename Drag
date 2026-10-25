@@ -1,5 +1,5 @@
 -- ==========================================================
--- TOWER DEFENSE MACRO SCRIPT (VERSION 4.3 - FLEXIBLE TOWER FINDER)
+-- TOWER DEFENSE MACRO SCRIPT (VERSION 4.4 - DYNAMIC TOWER INSTANCE MAPPING)
 -- Designed for Mobile / Delta Executor (Android)
 -- ==========================================================
 
@@ -38,7 +38,7 @@ corner.Parent = mainFrame
 local title = Instance.new("TextLabel")
 title.Size = UDim2.new(1, -40, 0, 40)
 title.BackgroundTransparency = 1
-title.Text = "  Tower Macro Pro v4.3"
+title.Text = "  Tower Macro Pro v4.4"
 title.TextColor3 = Color3.fromRGB(255, 255, 255)
 title.TextSize = 14
 title.Font = Enum.Font.GothamBold
@@ -220,7 +220,7 @@ local function logMessage(msg, color)
     end)
 end
 
-logMessage("Tower Macro Pro v4.3 Loaded. Ready.", Color3.fromRGB(100, 200, 255))
+logMessage("Tower Macro Pro v4.4 Loaded. Ready.", Color3.fromRGB(100, 200, 255))
 
 local isMinimized = true 
 minimizeBtn.MouseButton1Click:Connect(function()
@@ -351,6 +351,7 @@ local placedTowersCount = 0
 local isRecording = false
 local isPlaying = false
 local lastAutoStartTriggerTime = 0
+local activeMatchTowers = {} -- Menyimpan instance tower aktif di match saat ini
 
 local oldNamecall
 oldNamecall = hookmetamethod(game, "__namecall", function(self, ...)
@@ -612,6 +613,7 @@ startPlayback = function()
     end
 
     isPlaying = true
+    activeMatchTowers = {} -- Reset pemetaan tower untuk match baru ini
     playBtn.BackgroundColor3 = Color3.fromRGB(150, 150, 150)
     playBtn.Text = "Playing..."
     logMessage(string.format("Memulai playback (%d aksi)...", #recordedActions), Color3.fromRGB(50, 200, 90))
@@ -651,32 +653,72 @@ startPlayback = function()
                             remote:FireServer(unpack(action.Args))
                             placeRes = true
                         end
+                        
+                        -- Beri jeda agar server mereplikasi model tower baru di match ini
                         task.wait(0.4)
-                        return placeRes
-                    elseif action.Type == "Upgrade" or action.Type == "Sell" then
-                        local targetPos = recordedPlacePositions[action.TowerIndex]
-                        if not targetPos then
-                            for _, act in ipairs(recordedActions) do
-                                if act.Type == "Place" and act.TowerIndex == action.TowerIndex then
-                                    targetPos = act.Position
+                        
+                        -- Tangkap instance tower baru secara dinamis untuk match ini
+                        local spawnedInstance = nil
+                        if typeof(placeRes) == "Instance" then
+                            spawnedInstance = placeRes
+                        elseif type(placeRes) == "table" then
+                            for _, v in pairs(placeRes) do
+                                if typeof(v) == "Instance" then
+                                    spawnedInstance = v
                                     break
                                 end
                             end
                         end
-
-                        local targetObj = nil
-
-                        if targetPos then
+                        
+                        -- Fallback cari model terdekat di workspace berdasarkan posisi place jika return remote bukan instance
+                        if not spawnedInstance and action.Position then
                             local minDst = math.huge
-                            -- PERBAIKAN: Pencarian langsung menyeluruh ke seluruh model/bagian di workspace tanpa batasan nama folder yang kaku
                             for _, obj in ipairs(workspace:GetDescendants()) do
                                 if (obj:IsA("Model") or obj:IsA("BasePart")) and obj.Parent ~= nil then
                                     local pos = getModelPosition(obj)
                                     if pos then
-                                        local dist = (pos - targetPos).Magnitude
-                                        if dist < 10 and dist < minDst then
+                                        local dist = (pos - action.Position).Magnitude
+                                        if dist < 6 and dist < minDst then
                                             minDst = dist
-                                            targetObj = obj
+                                            spawnedInstance = obj
+                                        end
+                                    end
+                                end
+                            end
+                        end
+                        
+                        if spawnedInstance then
+                            activeMatchTowers[action.TowerIndex] = spawnedInstance
+                        end
+                        
+                        return placeRes
+                    elseif action.Type == "Upgrade" or action.Type == "Sell" then
+                        -- 1. Coba ambil instance langsung dari hasil spawn dynamic match ini
+                        local targetObj = activeMatchTowers[action.TowerIndex]
+                        
+                        -- 2. Jika belum ada, cari berdasarkan koordinat posisi place di workspace
+                        if not targetObj or not targetObj.Parent then
+                            local targetPos = recordedPlacePositions[action.TowerIndex]
+                            if not targetPos then
+                                for _, act in ipairs(recordedActions) do
+                                    if act.Type == "Place" and act.TowerIndex == action.TowerIndex then
+                                        targetPos = act.Position
+                                        break
+                                    end
+                                end
+                            end
+
+                            if targetPos then
+                                local minDst = math.huge
+                                for _, obj in ipairs(workspace:GetDescendants()) do
+                                    if (obj:IsA("Model") or obj:IsA("BasePart")) and obj.Parent ~= nil then
+                                        local pos = getModelPosition(obj)
+                                        if pos then
+                                            local dist = (pos - targetPos).Magnitude
+                                            if dist < 10 and dist < minDst then
+                                                minDst = dist
+                                                targetObj = obj
+                                            end
                                         end
                                     end
                                 end
@@ -714,7 +756,7 @@ startPlayback = function()
                     success = true
                 else
                     if attempts == 30 then
-                        logMessage(string.format("[WARNING] Masih mencari tower untuk %s...", actionDesc), Color3.fromRGB(255, 150, 50))
+                        logMessage(string.format("[WARNING] Menunggu instance tower untuk %s...", actionDesc), Color3.fromRGB(255, 150, 50))
                     end
                     task.wait(0.5)
                 end
