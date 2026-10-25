@@ -1,5 +1,5 @@
 -- ==========================================================
--- TOWER DEFENSE MACRO SCRIPT (VERSION 4.5 - SPAWN TRACKING & STABLE PLAYBACK)
+-- TOWER DEFENSE MACRO SCRIPT (VERSION 4.6 - DIRECT SPATIAL MAPPING)
 -- Designed for Mobile / Delta Executor (Android)
 -- ==========================================================
 
@@ -38,7 +38,7 @@ corner.Parent = mainFrame
 local title = Instance.new("TextLabel")
 title.Size = UDim2.new(1, -40, 0, 40)
 title.BackgroundTransparency = 1
-title.Text = "  Tower Macro Pro v4.5"
+title.Text = "  Tower Macro Pro v4.6"
 title.TextColor3 = Color3.fromRGB(255, 255, 255)
 title.TextSize = 14
 title.Font = Enum.Font.GothamBold
@@ -220,7 +220,7 @@ local function logMessage(msg, color)
     end)
 end
 
-logMessage("Tower Macro Pro v4.5 Loaded. Ready.", Color3.fromRGB(100, 200, 255))
+logMessage("Tower Macro Pro v4.6 Loaded. Ready.", Color3.fromRGB(100, 200, 255))
 
 local isMinimized = true 
 minimizeBtn.MouseButton1Click:Connect(function()
@@ -646,14 +646,6 @@ startPlayback = function()
                     if not remote then return false end
 
                     if action.Type == "Place" then
-                        -- Snapshot model yang sudah ada di workspace sebelum place
-                        local existingModels = {}
-                        for _, obj in ipairs(workspace:GetDescendants()) do
-                            if obj:IsA("Model") then
-                                existingModels[obj] = true
-                            end
-                        end
-
                         local placeRes
                         if action.Method == "InvokeServer" then
                             placeRes = remote:InvokeServer(unpack(action.Args))
@@ -662,48 +654,38 @@ startPlayback = function()
                             placeRes = true
                         end
                         
-                        -- Cari model baru yang muncul di workspace setelah aksi Place
-                        local spawnedInstance = nil
-                        if typeof(placeRes) == "Instance" then
-                            spawnedInstance = placeRes
-                        else
-                            local startTime = tick()
-                            while tick() - startTime < 1.5 do
-                                for _, obj in ipairs(workspace:GetDescendants()) do
-                                    if obj:IsA("Model") and not existingModels[obj] and obj.Parent ~= nil then
-                                        spawnedInstance = obj
-                                        break
-                                    end
-                                end
-                                if spawnedInstance then break end
-                                task.wait(0.1)
-                            end
-                        end
-
-                        -- Fallback cari berdasarkan koordinat jika belum ketemu
-                        if not spawnedInstance and action.Position then
+                        -- Beri jeda render
+                        task.wait(0.5)
+                        
+                        -- Pindai langsung objek terdekat di workspace berdasarkan posisi penempatan
+                        local placedObj = nil
+                        local targetPos = action.Position
+                        if targetPos then
                             local minDst = math.huge
                             for _, obj in ipairs(workspace:GetDescendants()) do
-                                if obj:IsA("Model") and obj.Parent ~= nil then
+                                if (obj:IsA("Model") or obj:IsA("BasePart")) and obj.Parent ~= nil then
                                     local pos = getModelPosition(obj)
                                     if pos then
-                                        local dist = (pos - action.Position).Magnitude
+                                        local dist = (pos - targetPos).Magnitude
                                         if dist < 15 and dist < minDst then
                                             minDst = dist
-                                            spawnedInstance = obj
+                                            placedObj = obj
                                         end
                                     end
                                 end
                             end
                         end
-
-                        if spawnedInstance then
-                            activeMatchTowers[action.TowerIndex] = spawnedInstance
+                        
+                        if placedObj then
+                            if placedObj:IsA("BasePart") and placedObj.Parent and placedObj.Parent:IsA("Model") then
+                                placedObj = placedObj.Parent
+                            end
+                            activeMatchTowers[action.TowerIndex] = placedObj
                         end
 
                         return placeRes
                     elseif action.Type == "Upgrade" or action.Type == "Sell" then
-                        -- Ambil instance tower dari activeMatchTowers
+                        -- Ambil referensi tower dari activeMatchTowers atau cari ulang di workspace
                         local targetObj = activeMatchTowers[action.TowerIndex]
                         
                         if not targetObj or not targetObj.Parent then
@@ -711,7 +693,7 @@ startPlayback = function()
                             if targetPos then
                                 local minDst = math.huge
                                 for _, obj in ipairs(workspace:GetDescendants()) do
-                                    if obj:IsA("Model") and obj.Parent ~= nil then
+                                    if (obj:IsA("Model") or obj:IsA("BasePart")) and obj.Parent ~= nil then
                                         local pos = getModelPosition(obj)
                                         if pos then
                                             local dist = (pos - targetPos).Magnitude
@@ -721,6 +703,9 @@ startPlayback = function()
                                             end
                                         end
                                     end
+                                end
+                                if targetObj and targetObj:IsA("BasePart") and targetObj.Parent and targetObj.Parent:IsA("Model") then
+                                    targetObj = targetObj.Parent
                                 end
                             end
                         end
@@ -756,7 +741,7 @@ startPlayback = function()
                     success = true
                 else
                     if attempts == 30 then
-                        logMessage(string.format("[WARNING] Menunggu instance tower untuk %s...", actionDesc), Color3.fromRGB(255, 150, 50))
+                        logMessage(string.format("[WARNING] Menunggu tower untuk %s...", actionDesc), Color3.fromRGB(255, 150, 50))
                     end
                     task.wait(0.5)
                 end
