@@ -1,5 +1,5 @@
 -- ==========================================================
--- TOWER DEFENSE MACRO SCRIPT (VERSION 3.8 - FIXED INSTANCE & TOWER BINDING)
+-- TOWER DEFENSE MACRO SCRIPT (VERSION 3.9 - FORCE RESTART & ACTIVE TOWER FILTER)
 -- Designed for Mobile / Delta Executor (Android)
 -- ==========================================================
 
@@ -38,7 +38,7 @@ corner.Parent = mainFrame
 local title = Instance.new("TextLabel")
 title.Size = UDim2.new(1, -40, 0, 40)
 title.BackgroundTransparency = 1
-title.Text = "  Tower Macro Pro v3.8"
+title.Text = "  Tower Macro Pro v3.9"
 title.TextColor3 = Color3.fromRGB(255, 255, 255)
 title.TextSize = 14
 title.Font = Enum.Font.GothamBold
@@ -226,7 +226,7 @@ local function logMessage(msg, color)
     end)
 end
 
-logMessage("Tower Macro Pro v3.8 Loaded. Ready.", Color3.fromRGB(100, 200, 255))
+logMessage("Tower Macro Pro v3.9 Loaded. Ready.", Color3.fromRGB(100, 200, 255))
 
 -- ==================== MINIMIZE LOGIC (AUTO MINIMIZED AWAL) ====================
 local isMinimized = true 
@@ -359,10 +359,9 @@ local recordedPlacePositions = {}
 local placedTowersCount = 0
 local isRecording = false
 local isPlaying = false
-local waitingForAutoStartTrigger = true 
 local lastAutoStartTriggerTime = 0
 
--- Intercept Remote Calls (Auto Start Trigger Sync)
+-- Intercept Remote Calls (Force Restart on Every StartMatch Execution)
 local oldNamecall
 oldNamecall = hookmetamethod(game, "__namecall", function(self, ...)
     local method = getnamecallmethod()
@@ -372,18 +371,18 @@ oldNamecall = hookmetamethod(game, "__namecall", function(self, ...)
     local success = res[1]
     local serverResult = res[2]
     
-    -- DETEKSI START MATCH (AUTO START)
+    -- DETEKSI START MATCH: Memaksa restart makro setiap kali StartMatch dijalankan (walaupun makro sebelumnya masih berjalan)
     if tostring(self.Name) == "StartMatch" and (method == "FireServer" or method == "InvokeServer") then
-        if autoStartEnabled and waitingForAutoStartTrigger and not isRecording then
+        if autoStartEnabled and not isRecording then
             local currentTime = tick()
-            if currentTime - lastAutoStartTriggerTime > 30 then
+            if currentTime - lastAutoStartTriggerTime > 15 then
                 lastAutoStartTriggerTime = currentTime
-                waitingForAutoStartTrigger = false 
                 
                 task.spawn(function()
+                    -- FORCE STOP MAKRO SEBELUMNYA
                     isPlaying = false
-                    logMessage("Fitur Auto Start menjalankan tugasnya! Memulai pemutaran makro...", Color3.fromRGB(100, 200, 255))
-                    task.wait(3.5) -- Jeda loading match baru
+                    logMessage("StartMatch terpanggil! Memaksa restart makro untuk match baru...", Color3.fromRGB(100, 200, 255))
+                    task.wait(4) -- Jeda loading map dan spawn tower baru secara sempurna
                     
                     local macroName = nameBox.Text ~= "" and nameBox.Text or "makro_1"
                     if loadMacro(macroName) then
@@ -678,11 +677,12 @@ startPlayback = function()
                         if targetPos then
                             local minDst = math.huge
                             for _, obj in ipairs(workspace:GetDescendants()) do
-                                if obj:IsA("Model") then
+                                -- FILTER: Pastikan objek adalah Model/BasePart DAN AKTIF (Parent tidak nil / bukan sisa match lama)
+                                if (obj:IsA("Model") or obj:IsA("BasePart")) and obj.Parent ~= nil then
                                     local pos = getModelPosition(obj)
                                     if pos then
                                         local dist = (pos - targetPos).Magnitude
-                                        -- Radius ketat 5 stud agar tidak salah sasaran ke tower sebelah
+                                        -- Radius ketat 5 stud agar akurat dan tidak salah sasaran ke tower sebelah
                                         if dist < 5 and dist < minDst then
                                             minDst = dist
                                             targetObj = obj
@@ -731,10 +731,9 @@ startPlayback = function()
         end
 
         isPlaying = false
-        waitingForAutoStartTrigger = true 
         playBtn.BackgroundColor3 = Color3.fromRGB(50, 200, 90)
         playBtn.Text = "Play"
-        logMessage("Playback selesai! Menunggu tugas Auto Start berikutnya...", Color3.fromRGB(100, 255, 150))
+        logMessage("Playback selesai!", Color3.fromRGB(100, 255, 150))
     end)
 end
 
