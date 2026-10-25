@@ -1,5 +1,5 @@
 -- ==========================================================
--- TOWER DEFENSE MACRO SCRIPT (VERSION 4.2 - DEBUG LOG & STABLE PLAYBACK)
+-- TOWER DEFENSE MACRO SCRIPT (VERSION 4.3 - FLEXIBLE TOWER FINDER)
 -- Designed for Mobile / Delta Executor (Android)
 -- ==========================================================
 
@@ -23,8 +23,8 @@ screenGui.ResetOnSpawn = false
 screenGui.Parent = playerGui
 
 local mainFrame = Instance.new("Frame")
-mainFrame.Size = UDim2.new(0, 320, 0, 40) -- Ukuran awal minimized
-mainFrame.Position = UDim2.new(0, 20, 0.5, -200) -- Posisi di sebelah kiri layar
+mainFrame.Size = UDim2.new(0, 320, 0, 40)
+mainFrame.Position = UDim2.new(0, 20, 0.5, -200)
 mainFrame.BackgroundColor3 = Color3.fromRGB(25, 25, 30)
 mainFrame.BorderSizePixel = 0
 mainFrame.Active = true
@@ -38,7 +38,7 @@ corner.Parent = mainFrame
 local title = Instance.new("TextLabel")
 title.Size = UDim2.new(1, -40, 0, 40)
 title.BackgroundTransparency = 1
-title.Text = "  Tower Macro Pro v4.2"
+title.Text = "  Tower Macro Pro v4.3"
 title.TextColor3 = Color3.fromRGB(255, 255, 255)
 title.TextSize = 14
 title.Font = Enum.Font.GothamBold
@@ -88,7 +88,6 @@ minimizeBtn.Font = Enum.Font.GothamBold
 minimizeBtn.Parent = mainFrame
 Instance.new("UICorner", minimizeBtn).CornerRadius = UDim.new(0, 6)
 
--- Main Container untuk Isi UI (Default Visible = false karena auto minimize)
 local contentContainer = Instance.new("Frame")
 contentContainer.Size = UDim2.new(1, 0, 1, -40)
 contentContainer.Position = UDim2.new(0, 0, 0, 40)
@@ -97,7 +96,6 @@ contentContainer.Visible = false
 contentContainer.Parent = mainFrame
 
 -- ==================== UI COMPONENTS ====================
--- Macro Name TextBox
 local nameBox = Instance.new("TextBox")
 nameBox.Size = UDim2.new(1, -20, 0, 30)
 nameBox.Position = UDim2.new(0, 10, 0, 5)
@@ -110,7 +108,6 @@ nameBox.PlaceholderText = "Nama Makro (Cth: makro_1)"
 nameBox.Parent = contentContainer
 Instance.new("UICorner", nameBox).CornerRadius = UDim.new(0, 6)
 
--- Save & Load Buttons Frame
 local saveLoadFrame = Instance.new("Frame")
 saveLoadFrame.Size = UDim2.new(1, -20, 0, 30)
 saveLoadFrame.Position = UDim2.new(0, 10, 0, 40)
@@ -138,7 +135,6 @@ loadBtn.Font = Enum.Font.GothamBold
 loadBtn.Parent = saveLoadFrame
 Instance.new("UICorner", loadBtn).CornerRadius = UDim.new(0, 6)
 
--- Toggles Frame (Auto Features)
 local togglesFrame = Instance.new("Frame")
 togglesFrame.Size = UDim2.new(1, -20, 0, 75)
 togglesFrame.Position = UDim2.new(0, 10, 0, 75)
@@ -164,7 +160,6 @@ local autoSpeedBtn = createToggle("Auto x2 Speed", 0, 0.52, 0.48)
 local autoSkipBtn = createToggle("Auto Skip", 38, 0, 0.48)
 local autoPlayMatchBtn = createToggle("Auto Play Match", 38, 0.52, 0.48)
 
--- Record & Play Buttons Frame
 local btnContainer = Instance.new("Frame")
 btnContainer.Size = UDim2.new(1, -20, 0, 40)
 btnContainer.Position = UDim2.new(0, 10, 0, 155)
@@ -192,7 +187,6 @@ playBtn.Font = Enum.Font.GothamBold
 playBtn.Parent = btnContainer
 Instance.new("UICorner", playBtn).CornerRadius = UDim.new(0, 8)
 
--- Console Log Scrolling Frame
 local logScroll = Instance.new("ScrollingFrame")
 logScroll.Size = UDim2.new(1, -20, 1, -205)
 logScroll.Position = UDim2.new(0, 10, 0, 200)
@@ -226,9 +220,8 @@ local function logMessage(msg, color)
     end)
 end
 
-logMessage("Tower Macro Pro v4.2 Loaded. Ready.", Color3.fromRGB(100, 200, 255))
+logMessage("Tower Macro Pro v4.3 Loaded. Ready.", Color3.fromRGB(100, 200, 255))
 
--- ==================== MINIMIZE LOGIC (AUTO MINIMIZED AWAL) ====================
 local isMinimized = true 
 minimizeBtn.MouseButton1Click:Connect(function()
     isMinimized = not isMinimized
@@ -243,7 +236,6 @@ minimizeBtn.MouseButton1Click:Connect(function()
     end
 end)
 
--- ==================== TOGGLE STATES & AUTOMATIONS ====================
 local autoStartEnabled = false
 local autoSpeedEnabled = false
 local autoSkipEnabled = false
@@ -328,7 +320,6 @@ task.spawn(function()
     end
 end)
 
--- Fungsi ROBUST untuk mendeteksi posisi model tower
 local function getModelPosition(obj)
     if not obj then return nil end
     if obj:IsA("Model") then
@@ -361,7 +352,6 @@ local isRecording = false
 local isPlaying = false
 local lastAutoStartTriggerTime = 0
 
--- Intercept Remote Calls (Force Restart on Every StartMatch Execution)
 local oldNamecall
 oldNamecall = hookmetamethod(game, "__namecall", function(self, ...)
     local method = getnamecallmethod()
@@ -371,7 +361,6 @@ oldNamecall = hookmetamethod(game, "__namecall", function(self, ...)
     local success = res[1]
     local serverResult = res[2]
     
-    -- DETEKSI START MATCH: Memaksa restart makro setiap kali StartMatch dijalankan
     if tostring(self.Name) == "StartMatch" and (method == "FireServer" or method == "InvokeServer") then
         if autoStartEnabled and not isRecording then
             local currentTime = tick()
@@ -381,7 +370,7 @@ oldNamecall = hookmetamethod(game, "__namecall", function(self, ...)
                 task.spawn(function()
                     isPlaying = false
                     logMessage("StartMatch terpanggil! Memaksa restart makro untuk match baru...", Color3.fromRGB(100, 200, 255))
-                    task.wait(5) -- Jeda loading map dan spawn tower baru secara sempurna
+                    task.wait(5)
                     
                     local macroName = nameBox.Text ~= "" and nameBox.Text or "makro_1"
                     if loadMacro(macroName) then
@@ -662,7 +651,7 @@ startPlayback = function()
                             remote:FireServer(unpack(action.Args))
                             placeRes = true
                         end
-                        task.wait(0.4) -- Jeda render stabilisasi tower baru
+                        task.wait(0.4)
                         return placeRes
                     elseif action.Type == "Upgrade" or action.Type == "Sell" then
                         local targetPos = recordedPlacePositions[action.TowerIndex]
@@ -679,23 +668,15 @@ startPlayback = function()
 
                         if targetPos then
                             local minDst = math.huge
+                            -- PERBAIKAN: Pencarian langsung menyeluruh ke seluruh model/bagian di workspace tanpa batasan nama folder yang kaku
                             for _, obj in ipairs(workspace:GetDescendants()) do
-                                if obj:IsA("Model") and obj.Parent ~= nil then
-                                    local rootModel = obj
-                                    while rootModel.Parent and rootModel.Parent ~= workspace and not rootModel.Parent:IsA("Workspace") do
-                                        if rootModel.Parent.Name == "Towers" or rootModel.Parent.Name == "Units" or rootModel.Parent.Name == "TowersFolder" or rootModel.Parent:IsA("Folder") then
-                                            break
-                                        end
-                                        rootModel = rootModel.Parent
-                                    end
-
-                                    local pos = getModelPosition(rootModel)
+                                if (obj:IsA("Model") or obj:IsA("BasePart")) and obj.Parent ~= nil then
+                                    local pos = getModelPosition(obj)
                                     if pos then
                                         local dist = (pos - targetPos).Magnitude
-                                        -- Radius toleransi diperlebar ke 8 stud agar mudah mendeteksi tower
-                                        if dist < 8 and dist < minDst then
+                                        if dist < 10 and dist < minDst then
                                             minDst = dist
-                                            targetObj = rootModel
+                                            targetObj = obj
                                         end
                                     end
                                 end
@@ -732,9 +713,8 @@ startPlayback = function()
                 if ok and res ~= false then
                     success = true
                 else
-                    -- Jika sudah mencoba selama 10 detik (20 percobaan * 0.5s), cetak log debug agar tahu kendalanya
-                    if attempts == 20 then
-                        logMessage(string.format("[WARNING] Gagal mengeksekusi %s. Kemungkinan uang belum cukup atau tower belum spawn.", actionDesc), Color3.fromRGB(255, 150, 50))
+                    if attempts == 30 then
+                        logMessage(string.format("[WARNING] Masih mencari tower untuk %s...", actionDesc), Color3.fromRGB(255, 150, 50))
                     end
                     task.wait(0.5)
                 end
@@ -751,7 +731,6 @@ startPlayback = function()
     end)
 end
 
--- ==================== BUTTON EVENTS ====================
 saveBtn.MouseButton1Click:Connect(function()
     saveMacro()
 end)
@@ -787,7 +766,6 @@ playBtn.MouseButton1Click:Connect(function()
     startPlayback()
 end)
 
--- ==================== LOAD CONFIG ON STARTUP ====================
 task.spawn(function()
     task.wait(2)
     pcall(function()
