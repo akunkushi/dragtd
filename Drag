@@ -1,5 +1,5 @@
 -- ==========================================================
--- TOWER DEFENSE MACRO SCRIPT (VERSION 2.4 - WAVE 1 AUTO PLAY)
+-- TOWER DEFENSE MACRO SCRIPT (VERSION 2.6 - STRICT WAVE 1 ONLY)
 -- Designed for Mobile / Delta Executor (Android)
 -- ==========================================================
 
@@ -38,7 +38,7 @@ corner.Parent = mainFrame
 local title = Instance.new("TextLabel")
 title.Size = UDim2.new(1, -40, 0, 40)
 title.BackgroundTransparency = 1
-title.Text = "  Tower Macro Pro v2.4"
+title.Text = "  Tower Macro Pro v2.6"
 title.TextColor3 = Color3.fromRGB(255, 255, 255)
 title.TextSize = 14
 title.Font = Enum.Font.GothamBold
@@ -226,7 +226,7 @@ local function logMessage(msg, color)
     end)
 end
 
-logMessage("Tower Macro Pro v2.4 Loaded. Ready.", Color3.fromRGB(100, 200, 255))
+logMessage("Tower Macro Pro v2.6 Loaded. Ready.", Color3.fromRGB(100, 200, 255))
 
 -- ==================== MINIMIZE LOGIC (AUTO MINIMIZED AWAL) ====================
 local isMinimized = true 
@@ -699,25 +699,29 @@ startPlayback = function()
     end)
 end
 
--- ==================== AUTO PLAY DETECTOR (WAVE 1 ONLY) ====================
+-- ==================== AUTO PLAY DETECTOR (STRICT WAVE 1 ONLY) ====================
 task.spawn(function()
     local lastWave1Detected = 0
     while true do
         task.wait(1)
         pcall(function()
-            if autoPlayMatchEnabled and not isPlaying and not isRecording then
-                -- Pindai PlayerGui untuk mencari teks "Wave 1"
+            if autoPlayMatchEnabled and not isRecording then
+                -- Pindai PlayerGui HANYA untuk teks "Wave 1"
                 for _, desc in ipairs(playerGui:GetDescendants()) do
                     if desc:IsA("TextLabel") and desc.Visible then
                         local txt = desc.Text:lower()
-                        -- Hanya mendeteksi Wave 1 secara spesifik (mengabaikan Wave 2, 3, dst)
-                        if txt:find("wave 1") or txt:find("wave: 1") or txt == "1" then
+                        -- Mendeteksi secara spesifik teks Wave 1 di layar
+                        if txt:find("wave 1") or txt:find("wave: 1") then
                             local currentTime = tick()
-                            -- Debounce 60 detik agar tidak memicu ulang di wave 1 yang sama
-                            if currentTime - lastWave1Detected > 60 then
+                            -- Debounce 30 detik agar tidak memicu ulang di wave 1 yang sama
+                            if currentTime - lastWave1Detected > 30 then
                                 lastWave1Detected = currentTime
-                                isPlaying = false -- Reset status play sebelumnya
-                                logMessage("Wave 1 terdeteksi! Memulai makro...", Color3.fromRGB(100, 200, 255))
+                                
+                                -- FORCE RESET: Hentikan playback lama yang mungkin masih menyangkut
+                                isPlaying = false
+                                task.wait(0.5)
+                                
+                                logMessage("Wave 1 terdeteksi! Memulai ulang makro...", Color3.fromRGB(100, 200, 255))
                                 task.wait(1.5)
                                 local macroName = nameBox.Text ~= "" and nameBox.Text or "makro_1"
                                 if loadMacro(macroName) then
