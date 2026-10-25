@@ -1,5 +1,5 @@
 -- ==========================================================
--- TOWER DEFENSE MACRO SCRIPT (VERSION 2.7 - PRECISE WAVE 1 FIX)
+-- TOWER DEFENSE MACRO SCRIPT (VERSION 3.0 - AUTO START MATCH TRIGGER)
 -- Designed for Mobile / Delta Executor (Android)
 -- ==========================================================
 
@@ -38,7 +38,7 @@ corner.Parent = mainFrame
 local title = Instance.new("TextLabel")
 title.Size = UDim2.new(1, -40, 0, 40)
 title.BackgroundTransparency = 1
-title.Text = "  Tower Macro Pro v2.7"
+title.Text = "  Tower Macro Pro v3.0"
 title.TextColor3 = Color3.fromRGB(255, 255, 255)
 title.TextSize = 14
 title.Font = Enum.Font.GothamBold
@@ -226,7 +226,7 @@ local function logMessage(msg, color)
     end)
 end
 
-logMessage("Tower Macro Pro v2.7 Loaded. Ready.", Color3.fromRGB(100, 200, 255))
+logMessage("Tower Macro Pro v3.0 Loaded. Ready.", Color3.fromRGB(100, 200, 255))
 
 -- ==================== MINIMIZE LOGIC (AUTO MINIMIZED AWAL) ====================
 local isMinimized = true 
@@ -351,8 +351,9 @@ local recordedPlacePositions = {}
 local placedTowersCount = 0
 local isRecording = false
 local isPlaying = false
+local lastStartMatchTime = 0
 
--- Intercept Remote Calls (Hanya untuk Record Sukses)
+-- Intercept Remote Calls (Mendeteksi StartMatch & Record Sukses)
 local oldNamecall
 oldNamecall = hookmetamethod(game, "__namecall", function(self, ...)
     local method = getnamecallmethod()
@@ -361,6 +362,31 @@ oldNamecall = hookmetamethod(game, "__namecall", function(self, ...)
     local res = {pcall(oldNamecall, self, unpack(args))}
     local success = res[1]
     local serverResult = res[2]
+    
+    -- DETEKSI START MATCH: Memulai ulang makro secara otomatis ketika StartMatch dipanggil (misal setelah auto start match / play again)
+    if tostring(self.Name) == "StartMatch" and (method == "FireServer" or method == "InvokeServer") then
+        if autoPlayMatchEnabled and not isRecording then
+            local currentTime = tick()
+            -- Debounce 30 detik agar tidak memicu ulang beruntun dalam satu match
+            if currentTime - lastStartMatchTime > 30 then
+                lastStartMatchTime = currentTime
+                task.spawn(function()
+                    -- FORCE RESET: Hentikan playback lama yang mungkin masih menyangkut
+                    isPlaying = false
+                    task.wait(1)
+                    
+                    logMessage("StartMatch terdeteksi! Memulai ulang makro...", Color3.fromRGB(100, 200, 255))
+                    task.wait(2) -- Beri jeda waktu loading map/match baru
+                    
+                    local macroName = nameBox.Text ~= "" and nameBox.Text or "makro_1"
+                    if loadMacro(macroName) then
+                        task.wait(1)
+                        startPlayback()
+                    end
+                end)
+            end
+        end
+    end
     
     if isRecording and (method == "InvokeServer" or method == "FireServer") then
         if success and serverResult ~= false then
@@ -698,48 +724,6 @@ startPlayback = function()
         logMessage("Playback selesai!", Color3.fromRGB(100, 255, 150))
     end)
 end
-
--- ==================== AUTO PLAY DETECTOR (STRICT PRECISE WAVE 1 ONLY) ====================
-task.spawn(function()
-    local lastWave1Detected = 0
-    while true do
-        task.wait(1)
-        pcall(function()
-            if autoPlayMatchEnabled and not isRecording then
-                -- Pindai PlayerGui untuk mencari teks wave secara spesifik
-                for _, desc in ipairs(playerGui:GetDescendants()) do
-                    if desc:IsA("TextLabel") and desc.Visible then
-                        local txt = desc.Text:lower()
-                        
-                        -- SYARAT KETAT: Harus ada kata wave/1, TAPI TIDAK BOLEH diikuti angka lagi (mencegah wave 10, 11, 12, dst)
-                        local isWave1 = (txt:find("wave 1") or txt:find("wave: 1") or txt == "1") and not txt:match("wave%s*1[0-9]")
-                        
-                        if isWave1 then
-                            local currentTime = tick()
-                            -- Debounce 30 detik agar tidak memicu ulang di wave 1 yang sama
-                            if currentTime - lastWave1Detected > 30 then
-                                lastWave1Detected = currentTime
-                                
-                                -- FORCE RESET: Hentikan playback lama yang mungkin masih menyangkut
-                                isPlaying = false
-                                task.wait(0.5)
-                                
-                                logMessage("Wave 1 terdeteksi secara akurat! Memulai ulang makro...", Color3.fromRGB(100, 200, 255))
-                                task.wait(1.5)
-                                local macroName = nameBox.Text ~= "" and nameBox.Text or "makro_1"
-                                if loadMacro(macroName) then
-                                    task.wait(1)
-                                    startPlayback()
-                                end
-                                break
-                            end
-                        end
-                    end
-                end
-            end
-        end)
-    end
-end)
 
 -- ==================== BUTTON EVENTS ====================
 saveBtn.MouseButton1Click:Connect(function()
