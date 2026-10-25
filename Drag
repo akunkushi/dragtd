@@ -1,5 +1,5 @@
 -- ==========================================================
--- TOWER DEFENSE MACRO SCRIPT (VERSION 2.1 - FULL FEATURES)
+-- TOWER DEFENSE MACRO SCRIPT (VERSION 2.2 - FIX PLAYBACK & RESET)
 -- Designed for Mobile / Delta Executor (Android)
 -- ==========================================================
 
@@ -38,7 +38,7 @@ corner.Parent = mainFrame
 local title = Instance.new("TextLabel")
 title.Size = UDim2.new(1, -40, 0, 40)
 title.BackgroundTransparency = 1
-title.Text = "  Tower Macro Pro v2.1"
+title.Text = "  Tower Macro Pro v2.2"
 title.TextColor3 = Color3.fromRGB(255, 255, 255)
 title.TextSize = 14
 title.Font = Enum.Font.GothamBold
@@ -226,7 +226,7 @@ local function logMessage(msg, color)
     end)
 end
 
-logMessage("Tower Macro Pro v2.1 Loaded. Ready.", Color3.fromRGB(100, 200, 255))
+logMessage("Tower Macro Pro v2.2 Loaded. Ready.", Color3.fromRGB(100, 200, 255))
 
 -- ==================== MINIMIZE LOGIC (AUTO MINIMIZED AWAL) ====================
 local isMinimized = true 
@@ -261,7 +261,6 @@ local function updateToggleVisual(btn, state, name)
     end
 end
 
--- Fungsi simpan konfigurasi ke file agar status toggle tersimpan permanen
 local function saveConfig()
     pcall(function()
         if writefile then
@@ -312,7 +311,6 @@ autoPlayMatchBtn.MouseButton1Click:Connect(function()
     saveConfig()
 end)
 
--- Loop background untuk Auto Start, Auto Speed, dan Auto Skip
 task.spawn(function()
     while true do
         task.wait(1)
@@ -330,7 +328,6 @@ task.spawn(function()
     end
 end)
 
--- ==================== HELPER POSISI 3D ====================
 local function getModelPosition(obj)
     if not obj then return nil end
     if obj:IsA("Model") then
@@ -346,11 +343,9 @@ local function getModelPosition(obj)
     return nil
 end
 
--- ==================== FORWARD DECLARATION ====================
 local startPlayback
 local loadMacro
 
--- ==================== MACRO ENGINE (SUCCESS-ONLY) ====================
 local recordedActions = {}
 local recordedPlacePositions = {} 
 local placedTowersCount = 0
@@ -368,14 +363,15 @@ oldNamecall = hookmetamethod(game, "__namecall", function(self, ...)
     local success = res[1]
     local serverResult = res[2]
     
-    -- Deteksi jika match baru dimulai melalui StartMatch (dengan debounce 15 detik)
+    -- Deteksi jika match baru dimulai melalui StartMatch (dengan debounce 10 detik dan reset total play state)
     if tostring(self.Name) == "StartMatch" and (method == "FireServer" or method == "InvokeServer") then
-        if autoPlayMatchEnabled and not isPlaying and not isRecording then
+        if autoPlayMatchEnabled and not isRecording then
             local currentTime = tick()
-            if currentTime - lastAutoPlayTime > 15 then
+            if currentTime - lastAutoPlayTime > 10 then
                 lastAutoPlayTime = currentTime
                 task.spawn(function()
-                    task.wait(2) -- Beri waktu sebentar untuk loading map baru
+                    isPlaying = false -- Paksa hentikan status play sebelumnya agar reset bersih
+                    task.wait(2.5) -- Tunggu map baru selesai dimuat
                     local macroName = nameBox.Text ~= "" and nameBox.Text or "makro_1"
                     logMessage("Match baru terdeteksi! Memuat makro: " .. macroName, Color3.fromRGB(100, 200, 255))
                     if loadMacro(macroName) then
@@ -502,7 +498,6 @@ oldNamecall = hookmetamethod(game, "__namecall", function(self, ...)
     return unpack(res, 2)
 end)
 
--- ==================== SAVE & LOAD FUNCTIONS ====================
 local function saveMacro()
     pcall(function()
         if writefile then
@@ -599,7 +594,6 @@ loadMacro = function(macroName)
     return success and result
 end
 
--- ==================== PLAYBACK FUNCTION ====================
 startPlayback = function()
     if isRecording then
         logMessage("Hentikan record terlebih dahulu!", Color3.fromRGB(255, 100, 100))
@@ -665,29 +659,14 @@ startPlayback = function()
 
                         if targetPos then
                             local minDst = math.huge
+                            -- Perluas toleransi radius pencarian objek model di game baru (menjadi 10 stud)
                             for _, obj in ipairs(workspace:GetDescendants()) do
                                 if obj:IsA("Model") then
                                     local pos = getModelPosition(obj)
                                     if pos then
                                         local dist = (pos - targetPos).Magnitude
-                                        if dist < 6 and dist < minDst then
+                                        if dist < 10 and dist < minDst then
                                             if cleanName == "" or string.find(obj.Name:lower(), cleanName:lower()) then
-                                                minDst = dist
-                                                targetObj = obj
-                                            end
-                                        end
-                                    end
-                                end
-                            end
-                            
-                            if not targetObj then
-                                minDst = math.huge
-                                for _, obj in ipairs(workspace:GetDescendants()) do
-                                    if obj:IsA("Model") then
-                                        local pos = getModelPosition(obj)
-                                        if pos then
-                                            local dist = (pos - targetPos).Magnitude
-                                            if dist < 8 and dist < minDst then
                                                 minDst = dist
                                                 targetObj = obj
                                             end
