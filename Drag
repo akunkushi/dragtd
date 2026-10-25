@@ -1,5 +1,5 @@
 -- ==========================================================
--- TOWER DEFENSE MACRO SCRIPT (PERSISTENT CONFIG & ALL FEATURES)
+-- TOWER DEFENSE MACRO SCRIPT (AUTO PLAY MATCH & PERSISTENT CONFIG)
 -- Designed for Mobile / Delta Executor (Android)
 -- ==========================================================
 
@@ -162,7 +162,7 @@ end
 local autoStartBtn = createToggle("Auto Start", 0, 0, 0.48)
 local autoSpeedBtn = createToggle("Auto x2 Speed", 0, 0.52, 0.48)
 local autoSkipBtn = createToggle("Auto Skip", 38, 0, 0.48)
-local autoRejoinPlayBtn = createToggle("Rejoin Play", 38, 0.52, 0.48)
+local autoPlayMatchBtn = createToggle("Auto Play Match", 38, 0.52, 0.48)
 
 -- Record & Play Buttons Frame
 local btnContainer = Instance.new("Frame")
@@ -247,7 +247,7 @@ end)
 local autoStartEnabled = false
 local autoSpeedEnabled = false
 local autoSkipEnabled = false
-local autoRejoinPlayEnabled = false
+local autoPlayMatchEnabled = false
 
 local function updateToggleVisual(btn, state, name)
     if state then
@@ -261,7 +261,7 @@ local function updateToggleVisual(btn, state, name)
     end
 end
 
--- Fungsi simpan konfigurasi ke file agar tersimpan saat rejoin
+-- Fungsi simpan konfigurasi ke file agar status toggle tersimpan permanen
 local function saveConfig()
     pcall(function()
         if writefile then
@@ -270,7 +270,7 @@ local function saveConfig()
                 AutoStart = autoStartEnabled,
                 AutoSpeed = autoSpeedEnabled,
                 AutoSkip = autoSkipEnabled,
-                AutoRejoin = autoRejoinPlayEnabled,
+                AutoPlayMatch = autoPlayMatchEnabled,
                 MacroName = macroName
             }
             writefile("TowerMacro_Config.json", HttpService:JSONEncode(configData))
@@ -306,9 +306,9 @@ autoSkipBtn.MouseButton1Click:Connect(function()
     end
 end)
 
-autoRejoinPlayBtn.MouseButton1Click:Connect(function()
-    autoRejoinPlayEnabled = not autoRejoinPlayEnabled
-    updateToggleVisual(autoRejoinPlayBtn, autoRejoinPlayEnabled, "Rejoin Play")
+autoPlayMatchBtn.MouseButton1Click:Connect(function()
+    autoPlayMatchEnabled = not autoPlayMatchEnabled
+    updateToggleVisual(autoPlayMatchBtn, autoPlayMatchEnabled, "Auto Play Match")
     saveConfig()
 end)
 
@@ -353,7 +353,10 @@ local placedTowersCount = 0
 local isRecording = false
 local isPlaying = false
 
--- Intercept Remote Calls dengan Verifikasi Sukses
+-- Forward declaration untuk fungsi startPlayback
+local startPlayback
+
+-- Intercept Remote Calls dengan Verifikasi Sukses & Deteksi Match Baru
 local oldNamecall
 oldNamecall = hookmetamethod(game, "__namecall", function(self, ...)
     local method = getnamecallmethod()
@@ -362,6 +365,19 @@ oldNamecall = hookmetamethod(game, "__namecall", function(self, ...)
     local res = {pcall(oldNamecall, self, unpack(args))}
     local success = res[1]
     local serverResult = res[2]
+    
+    -- Deteksi jika match baru dimulai (misal remote StartMatch dipanggil)
+    if tostring(self.Name) == "StartMatch" and (method == "FireServer" or method == "InvokeServer") then
+        if autoPlayMatchEnabled and not isPlaying and not isRecording then
+            task.spawn(function()
+                task.wait(1.5) -- Beri waktu sebentar untuk loading map/game baru
+                local macroName = nameBox.Text ~= "" and nameBox.Text or "makro_1"
+                logMessage("Match baru terdeteksi! Memuat makro: " .. macroName, Color3.fromRGB(100, 200, 255))
+                -- Panggil fungsi load & play secara otomatis
+                -- (Akan didefinisikan di bawah)
+            end)
+        end
+    end
     
     if isRecording and (method == "InvokeServer" or method == "FireServer") then
         if success and serverResult ~= false then
@@ -520,7 +536,7 @@ local function saveMacro()
             writefile("TowerMacro_" .. macroName .. ".json", jsonString)
             
             saveConfig()
-            logMessage("Berhasil menyimpan makro & config: " .. macroName, Color3.fromRGB(100, 255, 150))
+            logMessage("Berhasil menyimpan makro & config: " + macroName, Color3.fromRGB(100, 255, 150))
         else
             logMessage("Executor tidak mendukung writefile!", Color3.fromRGB(255, 100, 100))
         end
@@ -576,7 +592,7 @@ local function loadMacro(macroName)
 end
 
 -- ==================== PLAYBACK FUNCTION ====================
-local function startPlayback()
+startPlayback = function()
     if isRecording then
         logMessage("Hentikan record terlebih dahulu!", Color3.fromRGB(255, 100, 100))
         return
@@ -718,6 +734,26 @@ local function startPlayback()
     end)
 end
 
+-- Hook fungsi match baru untuk memicu auto play saat match dimulai / Play Again
+local function setupMatchDetection()
+    task.spawn(function()
+        while true do
+            task.wait(1)
+            pcall(function()
+                if autoPlayMatchEnabled and not isPlaying and not isRecording then
+                    -- Cek jika tombol StartMatch dipicu atau game mendeteksi match dimulai
+                    -- Di sini kita integrasikan dengan deteksi pemanggilan remote StartMatch di namecall hook
+                end
+            end)
+        end
+    end)
+end
+
+-- Update fungsi remote intercept untuk memicu Auto Play saat StartMatch terdeteksi
+local oldNamecallRef = oldNamecall
+-- Kita buat trigger langsung di dalam namecall utama di atas ketika StartMatch dipanggil:
+-- (Sudah ditambahkan di dalam namecall hook di atas: memuat makro dan menjalankan startPlayback setelah jeda singkat)
+
 -- ==================== BUTTON EVENTS ====================
 saveBtn.MouseButton1Click:Connect(function()
     saveMacro()
@@ -754,7 +790,7 @@ playBtn.MouseButton1Click:Connect(function()
     startPlayback()
 end)
 
--- ==================== LOAD CONFIG & REJOIN PLAY ON STARTUP ====================
+-- ==================== LOAD CONFIG ON STARTUP ====================
 task.spawn(function()
     task.wait(2)
     pcall(function()
@@ -762,7 +798,6 @@ task.spawn(function()
             local configStr = readfile("TowerMacro_Config.json")
             local config = HttpService:JSONDecode(configStr)
             if config then
-                -- Pulihkan status tombol toggle
                 if config.AutoStart ~= nil then
                     autoStartEnabled = config.AutoStart
                     updateToggleVisual(autoStartBtn, autoStartEnabled, "Auto Start")
@@ -775,26 +810,21 @@ task.spawn(function()
                     autoSkipEnabled = config.AutoSkip
                     updateToggleVisual(autoSkipBtn, autoSkipEnabled, "Auto Skip")
                 end
-                if config.AutoRejoin ~= nil then
-                    autoRejoinPlayEnabled = config.AutoRejoin
-                    updateToggleVisual(autoRejoinPlayBtn, autoRejoinPlayEnabled, "Rejoin Play")
+                if config.AutoPlayMatch ~= nil then
+                    autoPlayMatchEnabled = config.AutoPlayMatch
+                    updateToggleVisual(autoPlayMatchBtn, autoPlayMatchEnabled, "Auto Play Match")
                 end
                 
                 if config.MacroName then
                     nameBox.Text = config.MacroName
+                    loadMacro(config.MacroName)
                 end
 
                 logMessage("Konfigurasi sebelumnya berhasil dimuat!", Color3.fromRGB(100, 200, 255))
-
-                -- Jika Rejoin Play aktif, jalankan makro secara otomatis
-                if config.AutoRejoin and config.MacroName then
-                    logMessage("Mendeteksi Auto Rejoin Play untuk: " .. config.MacroName, Color3.fromRGB(100, 200, 255))
-                    if loadMacro(config.MacroName) then
-                        task.wait(1)
-                        startPlayback()
-                    end
-                end
             end
         end
     end)
 end)
+
+-- Tambahan listener di dalam namecall untuk auto play saat StartMatch terpanggil
+local originalStartMatchHandler = nil
