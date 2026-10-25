@@ -1,5 +1,5 @@
 -- ==========================================================
--- TOWER DEFENSE MACRO SCRIPT (VERSION 4.1 - STABLE MATCH PLAYBACK)
+-- TOWER DEFENSE MACRO SCRIPT (VERSION 4.2 - DEBUG LOG & STABLE PLAYBACK)
 -- Designed for Mobile / Delta Executor (Android)
 -- ==========================================================
 
@@ -38,7 +38,7 @@ corner.Parent = mainFrame
 local title = Instance.new("TextLabel")
 title.Size = UDim2.new(1, -40, 0, 40)
 title.BackgroundTransparency = 1
-title.Text = "  Tower Macro Pro v4.1"
+title.Text = "  Tower Macro Pro v4.2"
 title.TextColor3 = Color3.fromRGB(255, 255, 255)
 title.TextSize = 14
 title.Font = Enum.Font.GothamBold
@@ -226,7 +226,7 @@ local function logMessage(msg, color)
     end)
 end
 
-logMessage("Tower Macro Pro v4.1 Loaded. Ready.", Color3.fromRGB(100, 200, 255))
+logMessage("Tower Macro Pro v4.2 Loaded. Ready.", Color3.fromRGB(100, 200, 255))
 
 -- ==================== MINIMIZE LOGIC (AUTO MINIMIZED AWAL) ====================
 local isMinimized = true 
@@ -379,10 +379,9 @@ oldNamecall = hookmetamethod(game, "__namecall", function(self, ...)
                 lastAutoStartTriggerTime = currentTime
                 
                 task.spawn(function()
-                    -- FORCE STOP MAKRO SEBELUMNYA
                     isPlaying = false
                     logMessage("StartMatch terpanggil! Memaksa restart makro untuk match baru...", Color3.fromRGB(100, 200, 255))
-                    task.wait(4) -- Jeda loading map dan spawn tower baru secara sempurna
+                    task.wait(5) -- Jeda loading map dan spawn tower baru secara sempurna
                     
                     local macroName = nameBox.Text ~= "" and nameBox.Text or "makro_1"
                     if loadMacro(macroName) then
@@ -645,7 +644,9 @@ startPlayback = function()
             logMessage(string.format("[PLAY] Menunggu kondisi untuk %s...", actionDesc), Color3.fromRGB(200, 200, 100))
 
             local success = false
+            local attempts = 0
             while isPlaying and not success do
+                attempts = attempts + 1
                 local ok, res = pcall(function()
                     local remote = action.Remote
                     if not remote or not remote.Parent then
@@ -661,11 +662,9 @@ startPlayback = function()
                             remote:FireServer(unpack(action.Args))
                             placeRes = true
                         end
-                        -- Beri jeda stabilisasi singkat agar model tower sempat ter-render di workspace match baru
-                        task.wait(0.3)
+                        task.wait(0.4) -- Jeda render stabilisasi tower baru
                         return placeRes
                     elseif action.Type == "Upgrade" or action.Type == "Sell" then
-                        -- AMBIL POSISI BERDASARKAN TOWER INDEX YANG TEPAT
                         local targetPos = recordedPlacePositions[action.TowerIndex]
                         if not targetPos then
                             for _, act in ipairs(recordedActions) do
@@ -693,8 +692,8 @@ startPlayback = function()
                                     local pos = getModelPosition(rootModel)
                                     if pos then
                                         local dist = (pos - targetPos).Magnitude
-                                        -- Radius toleransi ditingkatkan sedikit ke 7.5 agar aman dari pergeseran grid render
-                                        if dist < 7.5 and dist < minDst then
+                                        -- Radius toleransi diperlebar ke 8 stud agar mudah mendeteksi tower
+                                        if dist < 8 and dist < minDst then
                                             minDst = dist
                                             targetObj = rootModel
                                         end
@@ -733,6 +732,10 @@ startPlayback = function()
                 if ok and res ~= false then
                     success = true
                 else
+                    -- Jika sudah mencoba selama 10 detik (20 percobaan * 0.5s), cetak log debug agar tahu kendalanya
+                    if attempts == 20 then
+                        logMessage(string.format("[WARNING] Gagal mengeksekusi %s. Kemungkinan uang belum cukup atau tower belum spawn.", actionDesc), Color3.fromRGB(255, 150, 50))
+                    end
                     task.wait(0.5)
                 end
             end
