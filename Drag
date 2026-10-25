@@ -1,5 +1,5 @@
 -- ==========================================================
--- TOWER DEFENSE MACRO SCRIPT (VERSION 3.4 - FORCE RESTART ON STARTMATCH)
+-- TOWER DEFENSE MACRO SCRIPT (VERSION 3.7 - PRECISE TOWER BINDING)
 -- Designed for Mobile / Delta Executor (Android)
 -- ==========================================================
 
@@ -38,7 +38,7 @@ corner.Parent = mainFrame
 local title = Instance.new("TextLabel")
 title.Size = UDim2.new(1, -40, 0, 40)
 title.BackgroundTransparency = 1
-title.Text = "  Tower Macro Pro v3.4"
+title.Text = "  Tower Macro Pro v3.7"
 title.TextColor3 = Color3.fromRGB(255, 255, 255)
 title.TextSize = 14
 title.Font = Enum.Font.GothamBold
@@ -226,7 +226,7 @@ local function logMessage(msg, color)
     end)
 end
 
-logMessage("Tower Macro Pro v3.4 Loaded. Ready.", Color3.fromRGB(100, 200, 255))
+logMessage("Tower Macro Pro v3.7 Loaded. Ready.", Color3.fromRGB(100, 200, 255))
 
 -- ==================== MINIMIZE LOGIC (AUTO MINIMIZED AWAL) ====================
 local isMinimized = true 
@@ -328,13 +328,21 @@ task.spawn(function()
     end
 end)
 
+-- Fungsi ROBUST untuk mendeteksi posisi model tower
 local function getModelPosition(obj)
     if not obj then return nil end
     if obj:IsA("Model") then
         if obj.PrimaryPart then
             return obj.PrimaryPart.Position
-        else
-            local cf, size = obj:GetBoundingBox()
+        end
+        local part = obj:FindFirstChildWhichIsA("BasePart", true)
+        if part then
+            return part.Position
+        end
+        local success, cf = pcall(function()
+            return obj:GetBoundingBox()
+        end)
+        if success and cf then
             return cf.Position
         end
     elseif obj:IsA("BasePart") then
@@ -351,9 +359,10 @@ local recordedPlacePositions = {}
 local placedTowersCount = 0
 local isRecording = false
 local isPlaying = false
-local lastStartMatchTime = 0
+local waitingForAutoStartTrigger = true 
+local lastAutoStartTriggerTime = 0
 
--- Intercept Remote Calls (Auto Play Match & Force Restart on StartMatch)
+-- Intercept Remote Calls (Auto Start Trigger Sync)
 local oldNamecall
 oldNamecall = hookmetamethod(game, "__namecall", function(self, ...)
     local method = getnamecallmethod()
@@ -363,18 +372,18 @@ oldNamecall = hookmetamethod(game, "__namecall", function(self, ...)
     local success = res[1]
     local serverResult = res[2]
     
-    -- DETEKSI START MATCH: Menangkap sinyal StartMatch untuk match baru dan memaksa restart makro
+    -- DETEKSI START MATCH (AUTO START)
     if tostring(self.Name) == "StartMatch" and (method == "FireServer" or method == "InvokeServer") then
-        if autoPlayMatchEnabled and not isRecording then
+        if autoStartEnabled and waitingForAutoStartTrigger and not isRecording then
             local currentTime = tick()
-            -- Debounce 20 detik agar tidak memicu beruntun dalam waktu dekat
-            if currentTime - lastStartMatchTime > 20 then
-                lastStartMatchTime = currentTime
+            if currentTime - lastAutoStartTriggerTime > 30 then
+                lastAutoStartTriggerTime = currentTime
+                waitingForAutoStartTrigger = false 
+                
                 task.spawn(function()
-                    -- FORCE RESET: Hentikan playback lama secara paksa meskipun belum selesai
                     isPlaying = false
-                    logMessage("StartMatch terdeteksi! Memaksa restart makro untuk match baru...", Color3.fromRGB(100, 200, 255))
-                    task.wait(3) -- Jeda loading match baru agar seluruh model tower selesai spawn
+                    logMessage("Fitur Auto Start menjalankan tugasnya! Memulai pemutaran makro...", Color3.fromRGB(100, 200, 255))
+                    task.wait(3.5) -- Jeda loading match baru
                     
                     local macroName = nameBox.Text ~= "" and nameBox.Text or "makro_1"
                     if loadMacro(macroName) then
@@ -488,7 +497,7 @@ oldNamecall = hookmetamethod(game, "__namecall", function(self, ...)
                             Args = capturedArgs
                         })
                         
-                        logMessage(string.format("[RECORD] %s tower #%d [%s] (Target: Tower #%d)", actionType:lower(), #recordedActions, objName, matchedIndex), Color3.fromRGB(255, 200, 100))
+                        logMessage(string.format("[RECORD] %s tower #%d [%s] (Target Index: #%d)", actionType:lower(), #recordedActions, objName, matchedIndex), Color3.fromRGB(255, 200, 100))
                     end
                 end)
             end)
@@ -649,26 +658,28 @@ startPlayback = function()
                             return true
                         end
                     elseif action.Type == "Upgrade" or action.Type == "Sell" then
-                        local targetPos = nil
-                        for _, act in ipairs(recordedActions) do
-                            if act.Type == "Place" and act.TowerIndex == action.TowerIndex then
-                                targetPos = act.Position
-                                break
+                        -- PENCARIAN BERDASARKAN INDEX TOWER YANG DIIKAT SECARA KETAT (Mencegah tertukar antar tower berdekatan)
+                        local targetPos = recordedPlacePositions[action.TowerIndex]
+                        if not targetPos then
+                            for _, act in ipairs(recordedActions) do
+                                if act.Type == "Place" and act.TowerIndex == action.TowerIndex then
+                                    targetPos = act.Position
+                                    break
+                                end
                             end
                         end
 
                         local targetObj = nil
 
-                        -- PENCARIAN TOWER DIOPTIMALKAN: Memprioritaskan jarak koordinat terdekat secara mutlak
                         if targetPos then
                             local minDst = math.huge
                             for _, obj in ipairs(workspace:GetDescendants()) do
-                                if obj:IsA("Model") then
+                                if obj:IsA("Model") or obj:IsA("BasePart") then
                                     local pos = getModelPosition(obj)
                                     if pos then
                                         local dist = (pos - targetPos).Magnitude
-                                        -- Radius toleransi 8 stud dan memilih model yang jaraknya paling dekat mutlak
-                                        if dist < 8 and dist < minDst then
+                                        -- Menggunakan radius ketat khusus untuk tower index ini agar tidak salah sasaran ke tower sebelah
+                                        if dist < 6 and dist < minDst then
                                             minDst = dist
                                             targetObj = obj
                                         end
@@ -716,9 +727,10 @@ startPlayback = function()
         end
 
         isPlaying = false
+        waitingForAutoStartTrigger = true 
         playBtn.BackgroundColor3 = Color3.fromRGB(50, 200, 90)
         playBtn.Text = "Play"
-        logMessage("Playback selesai!", Color3.fromRGB(100, 255, 150))
+        logMessage("Playback selesai! Menunggu tugas Auto Start berikutnya...", Color3.fromRGB(100, 255, 150))
     end)
 end
 
