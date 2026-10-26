@@ -1,5 +1,5 @@
 -- ==========================================================
--- TOWER DEFENSE MACRO SCRIPT (VERSION 5.3 - POST-UPGRADE INSTANCE RE-SYNC)
+-- TOWER DEFENSE MACRO SCRIPT (VERSION 5.4 - UNIVERSAL PART TARGETING FOR SELL & UPGRADE)
 -- Designed for Mobile / Delta Executor (Android)
 -- ==========================================================
 
@@ -38,7 +38,7 @@ corner.Parent = mainFrame
 local title = Instance.new("TextLabel")
 title.Size = UDim2.new(1, -40, 0, 40)
 title.BackgroundTransparency = 1
-title.Text = "  Tower Macro Pro v5.3"
+title.Text = "  Tower Macro Pro v5.4"
 title.TextColor3 = Color3.fromRGB(255, 255, 255)
 title.TextSize = 14
 title.Font = Enum.Font.GothamBold
@@ -220,7 +220,7 @@ local function logMessage(msg, color)
     end)
 end
 
-logMessage("Tower Macro Pro v5.3 Loaded. Ready.", Color3.fromRGB(100, 200, 255))
+logMessage("Tower Macro Pro v5.4 Loaded. Ready.", Color3.fromRGB(100, 200, 255))
 
 local isMinimized = true 
 minimizeBtn.MouseButton1Click:Connect(function()
@@ -749,7 +749,8 @@ startPlayback = function()
 
                         if targetObj then
                             local finalTarget = targetObj
-                            if action.Type == "Upgrade" and action.SubInstanceName and action.SubInstanceName ~= "" then
+                            -- PERBAIKAN V5.4: Baik Upgrade maupun Sell sekarang sama-sama menggunakan SubInstanceName jika ada
+                            if action.SubInstanceName and action.SubInstanceName ~= "" then
                                 local foundSub = targetObj:FindFirstChild(action.SubInstanceName, true)
                                 if foundSub then
                                     finalTarget = foundSub
@@ -778,8 +779,6 @@ startPlayback = function()
                                 resVal = true
                             end
 
-                            -- PERBAIKAN V5.3: Jika aksi adalah Upgrade, perbarui referensi tower di activeMatchTowers 
-                            -- karena server mungkin telah mengganti model lama dengan model level baru yang baru
                             if action.Type == "Upgrade" and resVal ~= false then
                                 task.wait(0.2)
                                 local targetPos = recordedPlacePositions[action.TowerIndex]
