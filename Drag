@@ -1,5 +1,5 @@
 -- ==========================================================
--- TOWER DEFENSE MACRO SCRIPT (VERSION 5.20 - DYNAMIC SPATIAL RE-SCAN)
+-- TOWER DEFENSE MACRO SCRIPT (VERSION 5.21 - INFINITE CASH WAITING)
 -- Designed for Mobile / Delta Executor (Android)
 -- ==========================================================
 
@@ -38,7 +38,7 @@ corner.Parent = mainFrame
 local title = Instance.new("TextLabel")
 title.Size = UDim2.new(1, -40, 0, 40)
 title.BackgroundTransparency = 1
-title.Text = "  Tower Macro Pro v5.20"
+title.Text = "  Tower Macro Pro v5.21"
 title.TextColor3 = Color3.fromRGB(255, 255, 255)
 title.TextSize = 14
 title.Font = Enum.Font.GothamBold
@@ -221,7 +221,7 @@ local function logMessage(msg, color)
     end)
 end
 
-logMessage("Tower Macro Pro v5.20 Loaded. Ready.", Color3.fromRGB(100, 200, 255))
+logMessage("Tower Macro Pro v5.21 Loaded. Ready.", Color3.fromRGB(100, 200, 255))
 
 local isMinimized = true 
 minimizeBtn.MouseButton1Click:Connect(function()
@@ -763,13 +763,11 @@ startPlayback = function()
                             return false
                         end
                     elseif action.Type == "Upgrade" or action.Type == "Sell" then
-                        -- PERBAIKAN V5.20: DYNAMIC SPATIAL RE-SCAN MURNI (Tanpa cache model lama)
                         local targetObj = nil
                         local targetPos = recordedPlacePositions[action.TowerIndex]
                         
                         if targetPos then
                             local minDst = math.huge
-                            -- 1. Scan Workspace secara langsung berdasarkan koordinat posisi
                             for _, obj in ipairs(workspace:GetDescendants()) do
                                 if obj:IsA("Model") and obj.Parent ~= nil then
                                     local pos = getModelPosition(obj)
@@ -783,7 +781,6 @@ startPlayback = function()
                                 end
                             end
                             
-                            -- 2. Jika tidak ada di workspace, scan getnilinstances()
                             if not targetObj and getnilinstances then
                                 pcall(function()
                                     for _, obj in ipairs(getnilinstances()) do
@@ -837,10 +834,13 @@ startPlayback = function()
                 if ok and res ~= false then
                     success = true
                 else
-                    if attempts == 30 then
-                        logMessage(string.format("[WARNING] Tower #%d belum siap untuk %s...", action.TowerIndex or 0, actionDesc), Color3.fromRGB(255, 150, 50))
+                    -- V5.21 INFINITE CASH WAITING: 
+                    -- Jika server menolak (karena cash belum cukup), makro akan bersabar 
+                    -- menunggu dan mencoba ulang terus menerus tanpa batas waktu (timeout).
+                    if attempts % 10 == 0 then
+                        logMessage(string.format("[WAIT] Menunggu cash cukup untuk %s...", actionDesc), Color3.fromRGB(255, 200, 100))
                     end
-                    task.wait(0.5)
+                    task.wait(1)
                 end
             end
 
