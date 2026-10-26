@@ -1,5 +1,5 @@
 -- ==========================================================
--- TOWER DEFENSE MACRO SCRIPT (VERSION 4.9 - EXACT PART MAPPING & SERVER SYNC)
+-- TOWER DEFENSE MACRO SCRIPT (VERSION 5.0 - CHRONOLOGICAL TOWER BINDING)
 -- Designed for Mobile / Delta Executor (Android)
 -- ==========================================================
 
@@ -38,7 +38,7 @@ corner.Parent = mainFrame
 local title = Instance.new("TextLabel")
 title.Size = UDim2.new(1, -40, 0, 40)
 title.BackgroundTransparency = 1
-title.Text = "  Tower Macro Pro v4.9"
+title.Text = "  Tower Macro Pro v5.0"
 title.TextColor3 = Color3.fromRGB(255, 255, 255)
 title.TextSize = 14
 title.Font = Enum.Font.GothamBold
@@ -220,7 +220,7 @@ local function logMessage(msg, color)
     end)
 end
 
-logMessage("Tower Macro Pro v4.9 Loaded. Ready.", Color3.fromRGB(100, 200, 255))
+logMessage("Tower Macro Pro v5.0 Loaded. Ready.", Color3.fromRGB(100, 200, 255))
 
 local isMinimized = true 
 minimizeBtn.MouseButton1Click:Connect(function()
@@ -442,7 +442,6 @@ oldNamecall = hookmetamethod(game, "__namecall", function(self, ...)
                     if actionType then
                         local targetInstance = nil
                         local subInstanceName = ""
-                        local subInstanceClass = ""
                         
                         for _, arg in ipairs(capturedArgs) do
                             if typeof(arg) == "Instance" then
@@ -453,7 +452,6 @@ oldNamecall = hookmetamethod(game, "__namecall", function(self, ...)
                         
                         if targetInstance then
                             subInstanceName = targetInstance.Name
-                            subInstanceClass = targetInstance.ClassName
                         end
                         
                         local targetModel = targetInstance
@@ -464,6 +462,7 @@ oldNamecall = hookmetamethod(game, "__namecall", function(self, ...)
                             end
                         end
                         
+                        -- Menggunakan pencocokan urutan penempatan berdasarkan indeks terdekat / urutan waktu
                         local matchedIndex = 1
                         local objName = "Unknown"
                         
@@ -492,7 +491,6 @@ oldNamecall = hookmetamethod(game, "__namecall", function(self, ...)
                             Method = m,
                             ObjectName = objName,
                             SubInstanceName = subInstanceName,
-                            SubInstanceClass = subInstanceClass,
                             Args = capturedArgs
                         })
                         
@@ -540,7 +538,6 @@ local function saveMacro()
                     Method = act.Method,
                     ObjectName = act.ObjectName,
                     SubInstanceName = act.SubInstanceName,
-                    SubInstanceClass = act.SubInstanceClass,
                     Position = posData,
                     Args = serializedArgs
                 })
@@ -595,7 +592,6 @@ loadMacro = function(macroName)
                     Method = act.Method,
                     ObjectName = act.ObjectName,
                     SubInstanceName = act.SubInstanceName,
-                    SubInstanceClass = act.SubInstanceClass,
                     Position = realPos,
                     Args = deserializedArgs
                 })
@@ -669,42 +665,33 @@ startPlayback = function()
                             remote:FireServer(unpack(action.Args))
                         end
                         
-                        task.wait(1.0) -- Jeda stabilisasi server match baru
+                        task.wait(1.0)
                         
+                        -- Cari model tower yang baru muncul berdasarkan urutan terdekat dengan posisi yang disimpan
                         local placedObj = nil
-                        local startTime = tick()
-                        while tick() - startTime < 3 and not placedObj do
-                            for _, obj in ipairs(workspace:GetDescendants()) do
-                                if obj:IsA("Model") and obj.Parent ~= nil then
-                                    if towerName ~= "" and string.find(obj.Name:lower(), towerName:lower()) then
-                                        local pos = getModelPosition(obj)
-                                        if pos and action.Position then
-                                            if (pos - action.Position).Magnitude < 15 then
-                                                placedObj = obj
-                                                break
-                                            end
-                                        else
-                                            placedObj = obj
-                                            break
-                                        end
-                                    end
-                                end
-                            end
-                            if not placedObj then
-                                task.wait(0.1)
-                            end
-                        end
+                        local targetPos = recordedPlacePositions[action.TowerIndex]
                         
-                        if not placedObj and action.Position then
+                        if targetPos then
                             local minDst = math.huge
                             for _, obj in ipairs(workspace:GetDescendants()) do
                                 if obj:IsA("Model") and obj.Parent ~= nil then
-                                    local pos = getModelPosition(obj)
-                                    if pos then
-                                        local dist = (pos - action.Position).Magnitude
-                                        if dist < 25 and dist < minDst then
-                                            minDst = dist
-                                            placedObj = obj
+                                    -- Pastikan belum dipakai oleh index lain yang sudah di-mapping sebelumnya
+                                    local alreadyUsed = false
+                                    for _, assignedObj in pairs(activeMatchTowers) do
+                                        if assignedObj == obj then
+                                            alreadyUsed = true
+                                            break
+                                        end
+                                    end
+                                    
+                                    if not alreadyUsed then
+                                        local pos = getModelPosition(obj)
+                                        if pos then
+                                            local dist = (pos - targetPos).Magnitude
+                                            if dist < 12 and dist < minDst then
+                                                minDst = dist
+                                                placedObj = obj
+                                            end
                                         end
                                     end
                                 end
@@ -718,6 +705,7 @@ startPlayback = function()
                             return false
                         end
                     elseif action.Type == "Upgrade" or action.Type == "Sell" then
+                        -- Mengambil instance tower BERDASARKAN INDEX KRONOLOGIS YANG TEPAT (Tower #1 atau Tower #2)
                         local targetObj = activeMatchTowers[action.TowerIndex]
                         
                         if not targetObj or not targetObj.Parent then
@@ -729,7 +717,7 @@ startPlayback = function()
                                         local pos = getModelPosition(obj)
                                         if pos then
                                             local dist = (pos - targetPos).Magnitude
-                                            if dist < 30 and dist < minDst then
+                                            if dist < 15 and dist < minDst then
                                                 minDst = dist
                                                 targetObj = obj
                                             end
@@ -740,7 +728,6 @@ startPlayback = function()
                         end
 
                         if targetObj then
-                            -- Cari sub-instance / part spesifik yang dulunya diklik (misal: Hitbox/Part)
                             local finalTarget = targetObj
                             if action.SubInstanceName and action.SubInstanceName ~= "" then
                                 local foundSub = targetObj:FindFirstChild(action.SubInstanceName, true)
@@ -781,7 +768,7 @@ startPlayback = function()
                     success = true
                 else
                     if attempts == 30 then
-                        logMessage(string.format("[WARNING] Server menolak upgrade untuk %s...", actionDesc), Color3.fromRGB(255, 150, 50))
+                        logMessage(string.format("[WARNING] Tower #%d belum siap untuk %s...", action.TowerIndex or 0, actionDesc), Color3.fromRGB(255, 150, 50))
                     end
                     task.wait(0.5)
                 end
