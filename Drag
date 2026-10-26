@@ -1,5 +1,5 @@
 -- ==========================================================
--- TOWER DEFENSE MACRO SCRIPT (VERSION 5.2 - OPTIMIZED SELL & UPGRADE SYNC)
+-- TOWER DEFENSE MACRO SCRIPT (VERSION 5.3 - POST-UPGRADE INSTANCE RE-SYNC)
 -- Designed for Mobile / Delta Executor (Android)
 -- ==========================================================
 
@@ -38,7 +38,7 @@ corner.Parent = mainFrame
 local title = Instance.new("TextLabel")
 title.Size = UDim2.new(1, -40, 0, 40)
 title.BackgroundTransparency = 1
-title.Text = "  Tower Macro Pro v5.2"
+title.Text = "  Tower Macro Pro v5.3"
 title.TextColor3 = Color3.fromRGB(255, 255, 255)
 title.TextSize = 14
 title.Font = Enum.Font.GothamBold
@@ -220,7 +220,7 @@ local function logMessage(msg, color)
     end)
 end
 
-logMessage("Tower Macro Pro v5.2 Loaded. Ready.", Color3.fromRGB(100, 200, 255))
+logMessage("Tower Macro Pro v5.3 Loaded. Ready.", Color3.fromRGB(100, 200, 255))
 
 local isMinimized = true 
 minimizeBtn.MouseButton1Click:Connect(function()
@@ -749,7 +749,6 @@ startPlayback = function()
 
                         if targetObj then
                             local finalTarget = targetObj
-                            -- PERBAIKAN: Sell selalu memprioritaskan Model utama (targetObj), Upgrade menggunakan sub-instance jika ada
                             if action.Type == "Upgrade" and action.SubInstanceName and action.SubInstanceName ~= "" then
                                 local foundSub = targetObj:FindFirstChild(action.SubInstanceName, true)
                                 if foundSub then
@@ -778,6 +777,33 @@ startPlayback = function()
                                 remote:FireServer(unpack(playArgs))
                                 resVal = true
                             end
+
+                            -- PERBAIKAN V5.3: Jika aksi adalah Upgrade, perbarui referensi tower di activeMatchTowers 
+                            -- karena server mungkin telah mengganti model lama dengan model level baru yang baru
+                            if action.Type == "Upgrade" and resVal ~= false then
+                                task.wait(0.2)
+                                local targetPos = recordedPlacePositions[action.TowerIndex]
+                                if targetPos then
+                                    local minDst = math.huge
+                                    local updatedObj = nil
+                                    for _, obj in ipairs(workspace:GetDescendants()) do
+                                        if obj:IsA("Model") and obj.Parent ~= nil then
+                                            local pos = getModelPosition(obj)
+                                            if pos then
+                                                local dist = (pos - targetPos).Magnitude
+                                                if dist < 12 and dist < minDst then
+                                                    minDst = dist
+                                                    updatedObj = obj
+                                                end
+                                            end
+                                        end
+                                    end
+                                    if updatedObj then
+                                        activeMatchTowers[action.TowerIndex] = updatedObj
+                                    end
+                                end
+                            end
+
                             return resVal
                         else
                             return false
