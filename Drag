@@ -1,5 +1,5 @@
 -- ==========================================================
--- TOWER DEFENSE MACRO SCRIPT (VERSION 5.0 - CHRONOLOGICAL TOWER BINDING)
+-- TOWER DEFENSE MACRO SCRIPT (VERSION 5.1 - UNIQUE SNAPSHOT MAPPING)
 -- Designed for Mobile / Delta Executor (Android)
 -- ==========================================================
 
@@ -38,7 +38,7 @@ corner.Parent = mainFrame
 local title = Instance.new("TextLabel")
 title.Size = UDim2.new(1, -40, 0, 40)
 title.BackgroundTransparency = 1
-title.Text = "  Tower Macro Pro v5.0"
+title.Text = "  Tower Macro Pro v5.1"
 title.TextColor3 = Color3.fromRGB(255, 255, 255)
 title.TextSize = 14
 title.Font = Enum.Font.GothamBold
@@ -220,7 +220,7 @@ local function logMessage(msg, color)
     end)
 end
 
-logMessage("Tower Macro Pro v5.0 Loaded. Ready.", Color3.fromRGB(100, 200, 255))
+logMessage("Tower Macro Pro v5.1 Loaded. Ready.", Color3.fromRGB(100, 200, 255))
 
 local isMinimized = true 
 minimizeBtn.MouseButton1Click:Connect(function()
@@ -462,7 +462,6 @@ oldNamecall = hookmetamethod(game, "__namecall", function(self, ...)
                             end
                         end
                         
-                        -- Menggunakan pencocokan urutan penempatan berdasarkan indeks terdekat / urutan waktu
                         local matchedIndex = 1
                         local objName = "Unknown"
                         
@@ -657,37 +656,62 @@ startPlayback = function()
                     if not remote then return false end
 
                     if action.Type == "Place" then
-                        local towerName = tostring(action.Args[1]) or ""
-                        
+                        -- SNAPSHOT: Catat semua model yang sudah ada di workspace sebelum place
+                        local existingModels = {}
+                        for _, obj in ipairs(workspace:GetDescendants()) do
+                            if obj:IsA("Model") then
+                                existingModels[obj] = true
+                            end
+                        end
+
                         if action.Method == "InvokeServer" then
                             remote:InvokeServer(unpack(action.Args))
                         else
                             remote:FireServer(unpack(action.Args))
                         end
                         
-                        task.wait(1.0)
+                        task.wait(0.5)
                         
-                        -- Cari model tower yang baru muncul berdasarkan urutan terdekat dengan posisi yang disimpan
+                        -- Cari model baru yang MUNCUL setelah aksi place (menghindari salah pilih tower lama/berdekatan)
                         local placedObj = nil
-                        local targetPos = recordedPlacePositions[action.TowerIndex]
-                        
-                        if targetPos then
-                            local minDst = math.huge
+                        local startTime = tick()
+                        while tick() - startTime < 3 and not placedObj do
                             for _, obj in ipairs(workspace:GetDescendants()) do
-                                if obj:IsA("Model") and obj.Parent ~= nil then
-                                    -- Pastikan belum dipakai oleh index lain yang sudah di-mapping sebelumnya
-                                    local alreadyUsed = false
-                                    for _, assignedObj in pairs(activeMatchTowers) do
-                                        if assignedObj == obj then
-                                            alreadyUsed = true
+                                if obj:IsA("Model") and obj.Parent ~= nil and not existingModels[obj] then
+                                    local alreadyAssigned = false
+                                    for _, assigned in pairs(activeMatchTowers) do
+                                        if assigned == obj then
+                                            alreadyAssigned = true
                                             break
                                         end
                                     end
-                                    
-                                    if not alreadyUsed then
+                                    if not alreadyAssigned then
+                                        placedObj = obj
+                                        break
+                                    end
+                                end
+                            end
+                            if not placedObj then
+                                task.wait(0.1)
+                            end
+                        end
+                        
+                        -- Fallback cari berdasarkan posisi jika snapshot tidak mendeteksi model baru
+                        if not placedObj and action.Position then
+                            local minDst = math.huge
+                            for _, obj in ipairs(workspace:GetDescendants()) do
+                                if obj:IsA("Model") and obj.Parent ~= nil then
+                                    local alreadyAssigned = false
+                                    for _, assigned in pairs(activeMatchTowers) do
+                                        if assigned == obj then
+                                            alreadyAssigned = true
+                                            break
+                                        end
+                                    end
+                                    if not alreadyAssigned then
                                         local pos = getModelPosition(obj)
                                         if pos then
-                                            local dist = (pos - targetPos).Magnitude
+                                            local dist = (pos - action.Position).Magnitude
                                             if dist < 12 and dist < minDst then
                                                 minDst = dist
                                                 placedObj = obj
@@ -705,7 +729,7 @@ startPlayback = function()
                             return false
                         end
                     elseif action.Type == "Upgrade" or action.Type == "Sell" then
-                        -- Mengambil instance tower BERDASARKAN INDEX KRONOLOGIS YANG TEPAT (Tower #1 atau Tower #2)
+                        -- Ambil instance tower secara presisi dari indeks kronologis activeMatchTowers
                         local targetObj = activeMatchTowers[action.TowerIndex]
                         
                         if not targetObj or not targetObj.Parent then
