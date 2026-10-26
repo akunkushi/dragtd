@@ -1,5 +1,5 @@
 -- ==========================================================
--- TOWER DEFENSE MACRO SCRIPT (VERSION 5.4 - UNIVERSAL PART TARGETING FOR SELL & UPGRADE)
+-- TOWER DEFENSE MACRO SCRIPT (VERSION 5.6 - PLAY AGAIN AUTO TRIGGER)
 -- Designed for Mobile / Delta Executor (Android)
 -- ==========================================================
 
@@ -38,7 +38,7 @@ corner.Parent = mainFrame
 local title = Instance.new("TextLabel")
 title.Size = UDim2.new(1, -40, 0, 40)
 title.BackgroundTransparency = 1
-title.Text = "  Tower Macro Pro v5.4"
+title.Text = "  Tower Macro Pro v5.6"
 title.TextColor3 = Color3.fromRGB(255, 255, 255)
 title.TextSize = 14
 title.Font = Enum.Font.GothamBold
@@ -136,7 +136,7 @@ loadBtn.Parent = saveLoadFrame
 Instance.new("UICorner", loadBtn).CornerRadius = UDim.new(0, 6)
 
 local togglesFrame = Instance.new("Frame")
-togglesFrame.Size = UDim2.new(1, -20, 0, 75)
+togglesFrame.Size = UDim2.new(1, -20, 0, 115)
 togglesFrame.Position = UDim2.new(0, 10, 0, 75)
 togglesFrame.BackgroundTransparency = 1
 togglesFrame.Parent = contentContainer
@@ -159,10 +159,11 @@ local autoStartBtn = createToggle("Auto Start", 0, 0, 0.48)
 local autoSpeedBtn = createToggle("Auto x2 Speed", 0, 0.52, 0.48)
 local autoSkipBtn = createToggle("Auto Skip", 38, 0, 0.48)
 local autoPlayMatchBtn = createToggle("Auto Play Match", 38, 0.52, 0.48)
+local autoDeclineReviveBtn = createToggle("Auto Decline Revive", 76, 0, 1)
 
 local btnContainer = Instance.new("Frame")
 btnContainer.Size = UDim2.new(1, -20, 0, 40)
-btnContainer.Position = UDim2.new(0, 10, 0, 155)
+btnContainer.Position = UDim2.new(0, 10, 0, 195)
 btnContainer.BackgroundTransparency = 1
 btnContainer.Parent = contentContainer
 
@@ -188,8 +189,8 @@ playBtn.Parent = btnContainer
 Instance.new("UICorner", playBtn).CornerRadius = UDim.new(0, 8)
 
 local logScroll = Instance.new("ScrollingFrame")
-logScroll.Size = UDim2.new(1, -20, 1, -205)
-logScroll.Position = UDim2.new(0, 10, 0, 200)
+logScroll.Size = UDim2.new(1, -20, 1, -245)
+logScroll.Position = UDim2.new(0, 10, 0, 240)
 logScroll.BackgroundColor3 = Color3.fromRGB(15, 15, 18)
 logScroll.BorderSizePixel = 0
 logScroll.CanvasSize = UDim2.new(0, 0, 0, 0)
@@ -220,7 +221,7 @@ local function logMessage(msg, color)
     end)
 end
 
-logMessage("Tower Macro Pro v5.4 Loaded. Ready.", Color3.fromRGB(100, 200, 255))
+logMessage("Tower Macro Pro v5.6 Loaded. Ready.", Color3.fromRGB(100, 200, 255))
 
 local isMinimized = true 
 minimizeBtn.MouseButton1Click:Connect(function()
@@ -231,7 +232,7 @@ minimizeBtn.MouseButton1Click:Connect(function()
         contentContainer.Visible = false
     else
         minimizeBtn.Text = "-"
-        mainFrame.Size = UDim2.new(0, 320, 0, 520)
+        mainFrame.Size = UDim2.new(0, 320, 0, 560)
         contentContainer.Visible = true
     end
 end)
@@ -240,6 +241,7 @@ local autoStartEnabled = false
 local autoSpeedEnabled = false
 local autoSkipEnabled = false
 local autoPlayMatchEnabled = false
+local autoDeclineReviveEnabled = false
 
 local function updateToggleVisual(btn, state, name)
     if state then
@@ -262,6 +264,7 @@ local function saveConfig()
                 AutoSpeed = autoSpeedEnabled,
                 AutoSkip = autoSkipEnabled,
                 AutoPlayMatch = autoPlayMatchEnabled,
+                AutoDeclineRevive = autoDeclineReviveEnabled,
                 MacroName = macroName
             }
             writefile("TowerMacro_Config.json", HttpService:JSONEncode(configData))
@@ -303,6 +306,17 @@ autoPlayMatchBtn.MouseButton1Click:Connect(function()
     saveConfig()
 end)
 
+autoDeclineReviveBtn.MouseButton1Click:Connect(function()
+    autoDeclineReviveEnabled = not autoDeclineReviveEnabled
+    updateToggleVisual(autoDeclineReviveBtn, autoDeclineReviveEnabled, "Auto Decline Revive")
+    saveConfig()
+    if autoDeclineReviveEnabled then
+        pcall(function()
+            ReplicatedStorage.Remotes.DeclineRevive:FireServer()
+        end)
+    end
+end)
+
 task.spawn(function()
     while true do
         task.wait(1)
@@ -315,6 +329,9 @@ task.spawn(function()
             end
             if autoSkipEnabled then
                 ReplicatedStorage.Remotes.SetAutoSkip:FireServer(true)
+            end
+            if autoDeclineReviveEnabled then
+                ReplicatedStorage.Remotes.DeclineRevive:FireServer()
             end
         end)
     end
@@ -350,7 +367,7 @@ local recordedPlacePositions = {}
 local placedTowersCount = 0
 local isRecording = false
 local isPlaying = false
-local lastAutoStartTriggerTime = 0
+local lastPlayAgainTriggerTime = 0
 local activeMatchTowers = {}
 
 local oldNamecall
@@ -362,16 +379,17 @@ oldNamecall = hookmetamethod(game, "__namecall", function(self, ...)
     local success = res[1]
     local serverResult = res[2]
     
-    if tostring(self.Name) == "StartMatch" and (method == "FireServer" or method == "InvokeServer") then
-        if autoStartEnabled and not isRecording then
+    -- Memicu restart makro hanya setelah PlayAgain diklik/dipanggil
+    if tostring(self.Name) == "PlayAgain" and (method == "FireServer" or method == "InvokeServer") then
+        if autoPlayMatchEnabled and not isRecording then
             local currentTime = tick()
-            if currentTime - lastAutoStartTriggerTime > 15 then
-                lastAutoStartTriggerTime = currentTime
+            if currentTime - lastPlayAgainTriggerTime > 15 then
+                lastPlayAgainTriggerTime = currentTime
                 
                 task.spawn(function()
                     isPlaying = false
-                    logMessage("StartMatch terpanggil! Memaksa restart makro untuk match baru...", Color3.fromRGB(100, 200, 255))
-                    task.wait(6)
+                    logMessage("PlayAgain diklik! Memulai ulang makro untuk match baru...", Color3.fromRGB(100, 200, 255))
+                    task.wait(6) -- Waktu tunggu loading masuk match baru
                     
                     local macroName = nameBox.Text ~= "" and nameBox.Text or "makro_1"
                     if loadMacro(macroName) then
@@ -749,7 +767,6 @@ startPlayback = function()
 
                         if targetObj then
                             local finalTarget = targetObj
-                            -- PERBAIKAN V5.4: Baik Upgrade maupun Sell sekarang sama-sama menggunakan SubInstanceName jika ada
                             if action.SubInstanceName and action.SubInstanceName ~= "" then
                                 local foundSub = targetObj:FindFirstChild(action.SubInstanceName, true)
                                 if foundSub then
@@ -888,6 +905,10 @@ task.spawn(function()
                 if config.AutoPlayMatch ~= nil then
                     autoPlayMatchEnabled = config.AutoPlayMatch
                     updateToggleVisual(autoPlayMatchBtn, autoPlayMatchEnabled, "Auto Play Match")
+                end
+                if config.AutoDeclineRevive ~= nil then
+                    autoDeclineReviveEnabled = config.AutoDeclineRevive
+                    updateToggleVisual(autoDeclineReviveBtn, autoDeclineReviveEnabled, "Auto Decline Revive")
                 end
                 
                 if config.MacroName then
