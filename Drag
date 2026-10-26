@@ -1,5 +1,5 @@
 -- ==========================================================
--- TOWER DEFENSE MACRO SCRIPT (VERSION 5.11 - SMART BASEPART RESOLVER)
+-- TOWER DEFENSE MACRO SCRIPT (VERSION 5.12 - SMART FORM-CHANGE FALLBACK)
 -- Designed for Mobile / Delta Executor (Android)
 -- ==========================================================
 
@@ -38,7 +38,7 @@ corner.Parent = mainFrame
 local title = Instance.new("TextLabel")
 title.Size = UDim2.new(1, -40, 0, 40)
 title.BackgroundTransparency = 1
-title.Text = "  Tower Macro Pro v5.11"
+title.Text = "  Tower Macro Pro v5.12"
 title.TextColor3 = Color3.fromRGB(255, 255, 255)
 title.TextSize = 14
 title.Font = Enum.Font.GothamBold
@@ -221,7 +221,7 @@ local function logMessage(msg, color)
     end)
 end
 
-logMessage("Tower Macro Pro v5.11 Loaded. Ready.", Color3.fromRGB(100, 200, 255))
+logMessage("Tower Macro Pro v5.12 Loaded. Ready.", Color3.fromRGB(100, 200, 255))
 
 local isMinimized = true 
 minimizeBtn.MouseButton1Click:Connect(function()
@@ -765,13 +765,16 @@ startPlayback = function()
                         end
 
                         if targetObj then
-                            -- SMART RESOLVER V5.11: Cari sub-instance jika ada, 
-                            -- dan pastikan hasil akhirnya SELALU berupa BasePart valid (bukan Model mentah).
+                            -- SMART FORM-CHANGE FALLBACK V5.12:
+                            -- Cari sub-instance part. Jika tidak ditemukan (karena tower berubah bentuk/nama di level tinggi),
+                            -- ambil PrimaryPart atau BasePart pertama dari model tersebut secara aman.
                             local finalTarget = targetObj
                             if action.SubInstanceName and action.SubInstanceName ~= "" then
                                 local foundSub = targetObj:FindFirstChild(action.SubInstanceName, true)
                                 if foundSub then
                                     finalTarget = foundSub
+                                else
+                                    finalTarget = targetObj.PrimaryPart or targetObj:FindFirstChildWhichIsA("BasePart", true) or targetObj
                                 end
                             end
 
