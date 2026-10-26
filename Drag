@@ -1,5 +1,5 @@
 -- ==========================================================
--- TOWER DEFENSE MACRO SCRIPT (VERSION 5.21 - INFINITE CASH WAITING)
+-- TOWER DEFENSE MACRO SCRIPT (VERSION 5.22 - PRECISE SUB-INSTANCE TARGETING)
 -- Designed for Mobile / Delta Executor (Android)
 -- ==========================================================
 
@@ -38,7 +38,7 @@ corner.Parent = mainFrame
 local title = Instance.new("TextLabel")
 title.Size = UDim2.new(1, -40, 0, 40)
 title.BackgroundTransparency = 1
-title.Text = "  Tower Macro Pro v5.21"
+title.Text = "  Tower Macro Pro v5.22"
 title.TextColor3 = Color3.fromRGB(255, 255, 255)
 title.TextSize = 14
 title.Font = Enum.Font.GothamBold
@@ -221,7 +221,7 @@ local function logMessage(msg, color)
     end)
 end
 
-logMessage("Tower Macro Pro v5.21 Loaded. Ready.", Color3.fromRGB(100, 200, 255))
+logMessage("Tower Macro Pro v5.22 Loaded. Ready.", Color3.fromRGB(100, 200, 255))
 
 local isMinimized = true 
 minimizeBtn.MouseButton1Click:Connect(function()
@@ -368,7 +368,6 @@ local placedTowersCount = 0
 local isRecording = false
 local isPlaying = false
 local lastPlayAgainTriggerTime = 0
-local activeMatchTowers = {}
 
 local oldNamecall
 oldNamecall = hookmetamethod(game, "__namecall", function(self, ...)
@@ -660,7 +659,6 @@ startPlayback = function()
     end
 
     isPlaying = true
-    activeMatchTowers = {}
     playBtn.BackgroundColor3 = Color3.fromRGB(150, 150, 150)
     playBtn.Text = "Playing..."
     logMessage(string.format("Memulai playback (%d aksi)...", #recordedActions), Color3.fromRGB(50, 200, 90))
@@ -706,24 +704,16 @@ startPlayback = function()
                             remote:FireServer(unpack(action.Args))
                         end
                         
-                        task.wait(0.5)
+                        -- Berikan jeda stabilisasi setelah menempatkan tower
+                        task.wait(0.8)
                         
                         local placedObj = nil
                         local startTime = tick()
                         while tick() - startTime < 3 and not placedObj do
                             for _, obj in ipairs(workspace:GetDescendants()) do
                                 if obj:IsA("Model") and obj.Parent ~= nil and not existingModels[obj] then
-                                    local alreadyAssigned = false
-                                    for _, assigned in pairs(activeMatchTowers) do
-                                        if assigned == obj then
-                                            alreadyAssigned = true
-                                            break
-                                        end
-                                    end
-                                    if not alreadyAssigned then
-                                        placedObj = obj
-                                        break
-                                    end
+                                    placedObj = obj
+                                    break
                                 end
                             end
                             if not placedObj then
@@ -731,38 +721,9 @@ startPlayback = function()
                             end
                         end
                         
-                        if not placedObj and action.Position then
-                            local minDst = math.huge
-                            for _, obj in ipairs(workspace:GetDescendants()) do
-                                if obj:IsA("Model") and obj.Parent ~= nil then
-                                    local alreadyAssigned = false
-                                    for _, assigned in pairs(activeMatchTowers) do
-                                        if assigned == obj then
-                                            alreadyAssigned = true
-                                            break
-                                        end
-                                    end
-                                    if not alreadyAssigned then
-                                        local pos = getModelPosition(obj)
-                                        if pos then
-                                            local dist = (pos - action.Position).Magnitude
-                                            if dist < 15 and dist < minDst then
-                                                minDst = dist
-                                                placedObj = obj
-                                            end
-                                        end
-                                    end
-                                end
-                            end
-                        end
-                        
-                        if placedObj then
-                            activeMatchTowers[action.TowerIndex] = placedObj
-                            return true
-                        else
-                            return false
-                        end
+                        return placedObj ~= nil
                     elseif action.Type == "Upgrade" or action.Type == "Sell" then
+                        -- Cari model tower di map berdasarkan koordinat posisi
                         local targetObj = nil
                         local targetPos = recordedPlacePositions[action.TowerIndex]
                         
@@ -800,7 +761,15 @@ startPlayback = function()
                         end
 
                         if targetObj then
+                            -- PRECISE SUB-INSTANCE MATCHING V5.22:
+                            -- Cari part spesifik di dalam model (misalnya part partikel/badan tower yang direkam)
                             local finalTarget = targetObj
+                            if action.SubInstanceName and action.SubInstanceName ~= "" then
+                                local foundSub = targetObj:FindFirstChild(action.SubInstanceName, true)
+                                if foundSub then
+                                    finalTarget = foundSub
+                                end
+                            end
 
                             local playArgs = {}
                             if action.Args then
@@ -824,7 +793,11 @@ startPlayback = function()
                                 resVal = true
                             end
 
-                            return resVal
+                            -- Jika server mengembalikan true atau tidak error, anggap berhasil
+                            if resVal ~= false then
+                                return true
+                            end
+                            return false
                         else
                             return false
                         end
@@ -834,11 +807,8 @@ startPlayback = function()
                 if ok and res ~= false then
                     success = true
                 else
-                    -- V5.21 INFINITE CASH WAITING: 
-                    -- Jika server menolak (karena cash belum cukup), makro akan bersabar 
-                    -- menunggu dan mencoba ulang terus menerus tanpa batas waktu (timeout).
                     if attempts % 10 == 0 then
-                        logMessage(string.format("[WAIT] Menunggu cash cukup untuk %s...", actionDesc), Color3.fromRGB(255, 200, 100))
+                        logMessage(string.format("[WAIT] Menunggu server siap / cash untuk %s...", actionDesc), Color3.fromRGB(255, 200, 100))
                     end
                     task.wait(1)
                 end
