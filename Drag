@@ -1,5 +1,5 @@
 -- ==========================================================
--- TOWER DEFENSE MACRO SCRIPT (VERSION 5.19 - GETNIL & WORKSPACE DUAL SCAN)
+-- TOWER DEFENSE MACRO SCRIPT (VERSION 5.20 - DYNAMIC SPATIAL RE-SCAN)
 -- Designed for Mobile / Delta Executor (Android)
 -- ==========================================================
 
@@ -38,7 +38,7 @@ corner.Parent = mainFrame
 local title = Instance.new("TextLabel")
 title.Size = UDim2.new(1, -40, 0, 40)
 title.BackgroundTransparency = 1
-title.Text = "  Tower Macro Pro v5.19"
+title.Text = "  Tower Macro Pro v5.20"
 title.TextColor3 = Color3.fromRGB(255, 255, 255)
 title.TextSize = 14
 title.Font = Enum.Font.GothamBold
@@ -221,7 +221,7 @@ local function logMessage(msg, color)
     end)
 end
 
-logMessage("Tower Macro Pro v5.19 Loaded. Ready.", Color3.fromRGB(100, 200, 255))
+logMessage("Tower Macro Pro v5.20 Loaded. Ready.", Color3.fromRGB(100, 200, 255))
 
 local isMinimized = true 
 minimizeBtn.MouseButton1Click:Connect(function()
@@ -763,18 +763,13 @@ startPlayback = function()
                             return false
                         end
                     elseif action.Type == "Upgrade" or action.Type == "Sell" then
-                        -- DUAL SCAN WORKSPACE & GETNIL (Mendukung fungsi GetNil game)
+                        -- PERBAIKAN V5.20: DYNAMIC SPATIAL RE-SCAN MURNI (Tanpa cache model lama)
                         local targetObj = nil
                         local targetPos = recordedPlacePositions[action.TowerIndex]
                         
-                        -- 1. Cari di activeMatchTowers terlebih dahulu
-                        if activeMatchTowers[action.TowerIndex] and activeMatchTowers[action.TowerIndex].Parent then
-                            targetObj = activeMatchTowers[action.TowerIndex]
-                        end
-                        
-                        -- 2. Jika tidak ada, scan Workspace berdasarkan koordinat posisi
-                        if not targetObj and targetPos then
+                        if targetPos then
                             local minDst = math.huge
+                            -- 1. Scan Workspace secara langsung berdasarkan koordinat posisi
                             for _, obj in ipairs(workspace:GetDescendants()) do
                                 if obj:IsA("Model") and obj.Parent ~= nil then
                                     local pos = getModelPosition(obj)
@@ -787,29 +782,27 @@ startPlayback = function()
                                     end
                                 end
                             end
-                        end
-                        
-                        -- 3. Jika masih tidak ada (sedang dipindahkan ke nil saat proses upgrade), scan getnilinstances()
-                        if not targetObj and targetPos and getnilinstances then
-                            pcall(function()
-                                local minDst = math.huge
-                                for _, obj in ipairs(getnilinstances()) do
-                                    if obj:IsA("Model") then
-                                        local pos = getModelPosition(obj)
-                                        if pos then
-                                            local dist = (pos - targetPos).Magnitude
-                                            if dist < 25 and dist < minDst then
-                                                minDst = dist
-                                                targetObj = obj
+                            
+                            -- 2. Jika tidak ada di workspace, scan getnilinstances()
+                            if not targetObj and getnilinstances then
+                                pcall(function()
+                                    for _, obj in ipairs(getnilinstances()) do
+                                        if obj:IsA("Model") then
+                                            local pos = getModelPosition(obj)
+                                            if pos then
+                                                local dist = (pos - targetPos).Magnitude
+                                                if dist < 25 and dist < minDst then
+                                                    minDst = dist
+                                                    targetObj = obj
+                                                end
                                             end
                                         end
                                     end
-                                end
-                            end)
+                                end)
+                            end
                         end
 
                         if targetObj then
-                            activeMatchTowers[action.TowerIndex] = targetObj
                             local finalTarget = targetObj
 
                             local playArgs = {}
@@ -832,30 +825,6 @@ startPlayback = function()
                             else
                                 remote:FireServer(unpack(playArgs))
                                 resVal = true
-                            end
-
-                            -- Update referensi setelah upgrade sukses ke model baru (misal Storm_2)
-                            if action.Type == "Upgrade" and resVal ~= false then
-                                task.wait(0.3)
-                                if targetPos then
-                                    local newUpdatedObj = nil
-                                    local minDst = math.huge
-                                    for _, obj in ipairs(workspace:GetDescendants()) do
-                                        if obj:IsA("Model") and obj.Parent ~= nil and obj ~= targetObj then
-                                            local pos = getModelPosition(obj)
-                                            if pos then
-                                                local dist = (pos - targetPos).Magnitude
-                                                if dist < 25 and dist < minDst then
-                                                    minDst = dist
-                                                    newUpdatedObj = obj
-                                                end
-                                            end
-                                        end
-                                    end
-                                    if newUpdatedObj then
-                                        activeMatchTowers[action.TowerIndex] = newUpdatedObj
-                                    end
-                                end
                             end
 
                             return resVal
