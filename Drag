@@ -1,5 +1,5 @@
 -- ==========================================================
--- TOWER DEFENSE MACRO SCRIPT (VERSION 5.24 - MULTI-TOWER & ARGUMENT FIX)
+-- TOWER DEFENSE MACRO SCRIPT (VERSION 5.26 - EVOLVE & UPGRADE DUAL REMOTE ROUTING)
 -- Designed for Mobile / Delta Executor (Android)
 -- ==========================================================
 
@@ -38,7 +38,7 @@ corner.Parent = mainFrame
 local title = Instance.new("TextLabel")
 title.Size = UDim2.new(1, -40, 0, 40)
 title.BackgroundTransparency = 1
-title.Text = "  Tower Macro Pro v5.24"
+title.Text = "  Tower Macro Pro v5.26"
 title.TextColor3 = Color3.fromRGB(255, 255, 255)
 title.TextSize = 14
 title.Font = Enum.Font.GothamBold
@@ -221,7 +221,7 @@ local function logMessage(msg, color)
     end)
 end
 
-logMessage("Tower Macro Pro v5.24 Loaded. Ready.", Color3.fromRGB(100, 200, 255))
+logMessage("Tower Macro Pro v5.26 Loaded. Ready.", Color3.fromRGB(100, 200, 255))
 
 local isMinimized = true 
 minimizeBtn.MouseButton1Click:Connect(function()
@@ -471,7 +471,7 @@ oldNamecall = hookmetamethod(game, "__namecall", function(self, ...)
                     local actionType = nil
                     if string.match(remoteName, "sell") or string.match(remoteName, "remove") or string.match(remoteName, "delete") then
                         actionType = "Sell"
-                    elseif string.match(remoteName, "upgrade") or string.match(remoteName, "level") or string.match(remoteName, "up") then
+                    elseif string.match(remoteName, "upgrade") or string.match(remoteName, "level") or string.match(remoteName, "up") or string.match(remoteName, "evolve") or string.match(remoteName, "tier") or string.match(remoteName, "form") then
                         actionType = "Upgrade"
                     end
                     
@@ -521,7 +521,7 @@ oldNamecall = hookmetamethod(game, "__namecall", function(self, ...)
                             Args = capturedArgs
                         })
                         
-                        logMessage(string.format("[RECORD] %s tower #%d [%s] (Target Index: #%d)", actionType:lower(), #recordedActions, objName, matchedIndex), Color3.fromRGB(255, 200, 100))
+                        logMessage(string.format("[RECORD] %s tower #%d [%s] (Remote: %s)", actionType:lower(), #recordedActions, objName, remote.Name), Color3.fromRGB(255, 200, 100))
                     end
                 end)
             end)
@@ -662,7 +662,7 @@ startPlayback = function()
                 local towerName = tostring(action.Args[1]) or "Tower"
                 actionDesc = string.format("place tower #%d [%s]", action.TowerIndex, towerName)
             elseif action.Type == "Upgrade" then
-                actionDesc = string.format("upgrade tower #%d [%s]", action.TowerIndex, action.ObjectName)
+                actionDesc = string.format("upgrade/evolve tower #%d [%s] via remote [%s]", action.TowerIndex, action.ObjectName, action.RemoteName)
             elseif action.Type == "Sell" then
                 actionDesc = string.format("sell tower #%d [%s]", action.TowerIndex, action.ObjectName)
             end
@@ -711,7 +711,7 @@ startPlayback = function()
                         end
                         
                         return placedObj ~= nil
-                    elseif action.Type == "Upgrade" or action.Type == "Sell" then
+                    elseif action.Type == "Upgrade" then
                         local targetObj = nil
                         local targetPos = recordedPlacePositions[action.TowerIndex]
                         
@@ -739,14 +739,14 @@ startPlayback = function()
                                                 local dist = (pos - targetPos).Magnitude
                                                 if dist < 25 and dist < minDst then
                                                     minDst = dist
-                                                    targetObj = obj
-                                                end
-                                            end
+                                            targetObj = obj
                                         end
                                     end
-                                end)
+                                end
                             end
-                        end
+                        end)
+                    end
+                end
 
                         if targetObj then
                             local finalTarget = targetObj
@@ -826,7 +826,7 @@ recordBtn.MouseButton1Click:Connect(function()
         placedTowersCount = 0
         recordBtn.BackgroundColor3 = Color3.fromRGB(150, 50, 50)
         recordBtn.Text = "Recording..."
-        logMessage("Recording dimulai! Silakan place, upgrade, atau sell.", Color3.fromRGB(255, 100, 100))
+        logMessage("Recording dimulai! Silakan place, evolve/upgrade, atau sell.", Color3.fromRGB(255, 100, 100))
     else
         recordBtn.BackgroundColor3 = Color3.fromRGB(220, 50, 50)
         recordBtn.Text = "Record"
@@ -844,8 +844,9 @@ task.spawn(function()
     pcall(function()
         if isfile and isfile("TowerMacro_Config.json") then
             local configStr = readfile("TowerMacro_Config.json")
-            local config = HttpService:JSONDecode(configStr)
-            if config then
+            configStr = configStr or ""
+            local ok, config = pcall(function() return HttpService:JSONDecode(configStr) end)
+            if ok and config then
                 if config.AutoStart ~= nil then
                     autoStartEnabled = config.AutoStart
                     updateToggleVisual(autoStartBtn, autoStartEnabled, "Auto Start")
