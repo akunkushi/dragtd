@@ -1,5 +1,5 @@
 -- ==========================================================
--- TOWER DEFENSE MACRO SCRIPT (VERSION 5.15 - STORM MODEL FIX)
+-- TOWER DEFENSE MACRO SCRIPT (VERSION 5.17 - DIRECT WORKSPACE POSITION CAPTURE)
 -- Designed for Mobile / Delta Executor (Android)
 -- ==========================================================
 
@@ -38,7 +38,7 @@ corner.Parent = mainFrame
 local title = Instance.new("TextLabel")
 title.Size = UDim2.new(1, -40, 0, 40)
 title.BackgroundTransparency = 1
-title.Text = "  Tower Macro Pro v5.15"
+title.Text = "  Tower Macro Pro v5.17"
 title.TextColor3 = Color3.fromRGB(255, 255, 255)
 title.TextSize = 14
 title.Font = Enum.Font.GothamBold
@@ -221,7 +221,7 @@ local function logMessage(msg, color)
     end)
 end
 
-logMessage("Tower Macro Pro v5.15 Loaded. Ready.", Color3.fromRGB(100, 200, 255))
+logMessage("Tower Macro Pro v5.17 Loaded. Ready.", Color3.fromRGB(100, 200, 255))
 
 local isMinimized = true 
 minimizeBtn.MouseButton1Click:Connect(function()
@@ -424,15 +424,29 @@ oldNamecall = hookmetamethod(game, "__namecall", function(self, ...)
                         placedTowersCount = placedTowersCount + 1
                         local currentTowerIndex = placedTowersCount
                         
+                        -- Tangkap posisi dari workspace setelah tower muncul
+                        task.wait(0.3)
                         local placePos = nil
-                        for _, arg in ipairs(capturedArgs) do
-                            if typeof(arg) == "Vector3" then
-                                placePos = arg
-                                break
+                        for _, obj in ipairs(workspace:GetDescendants()) do
+                            if obj:IsA("Model") and obj.Parent ~= nil then
+                                local pos = getModelPosition(obj)
+                                if pos then
+                                    local alreadyRecorded = false
+                                    for _, p in pairs(recordedPlacePositions) do
+                                        if (p - pos).Magnitude < 2 then
+                                            alreadyRecorded = true
+                                            break
+                                        end
+                                    end
+                                    if not alreadyRecorded then
+                                        placePos = pos
+                                        break
+                                    end
+                                end
                             end
                         end
                         
-                        recordedPlacePositions[currentTowerIndex] = placePos
+                        recordedPlacePositions[currentTowerIndex] = placePos or Vector3.new(0,0,0)
                         
                         table.insert(recordedActions, {
                             Type = "Place",
@@ -444,8 +458,7 @@ oldNamecall = hookmetamethod(game, "__namecall", function(self, ...)
                         })
                         
                         local towerName = tostring(capturedArgs[1]) or "Unknown"
-                        local posStr = placePos and string.format("(%.1f, %.1f, %.1f)", placePos.X, placePos.Y, placePos.Z) or "Vector3"
-                        logMessage(string.format("[RECORD] place tower #%d [%s] at %s", currentTowerIndex, towerName, posStr), Color3.fromRGB(255, 200, 100))
+                        logMessage(string.format("[RECORD] place tower #%d [%s]", currentTowerIndex, towerName), Color3.fromRGB(255, 200, 100))
                         return
                     end
                     
@@ -726,7 +739,7 @@ startPlayback = function()
                                         local pos = getModelPosition(obj)
                                         if pos then
                                             local dist = (pos - action.Position).Magnitude
-                                            if dist < 12 and dist < minDst then
+                                            if dist < 15 and dist < minDst then
                                                 minDst = dist
                                                 placedObj = obj
                                             end
@@ -743,7 +756,7 @@ startPlayback = function()
                             return false
                         end
                     elseif action.Type == "Upgrade" or action.Type == "Sell" then
-                        -- Cari model Storm di map berdasarkan koordinat posisi penempatannya
+                        -- Cari model tower di map berdasarkan koordinat posisi penempatannya
                         local targetObj = nil
                         local targetPos = recordedPlacePositions[action.TowerIndex]
                         
@@ -754,7 +767,7 @@ startPlayback = function()
                                     local pos = getModelPosition(obj)
                                     if pos then
                                         local dist = (pos - targetPos).Magnitude
-                                        if dist < 15 and dist < minDst then
+                                        if dist < 20 and dist < minDst then
                                             minDst = dist
                                             targetObj = obj
                                         end
@@ -768,7 +781,6 @@ startPlayback = function()
                         end
 
                         if targetObj then
-                            -- Kirim model Storm secara utuh (seperti Storm_1, Storm_2, dst)
                             local finalTarget = targetObj
 
                             local playArgs = {}
@@ -791,6 +803,30 @@ startPlayback = function()
                             else
                                 remote:FireServer(unpack(playArgs))
                                 resVal = true
+                            end
+
+                            -- Perbarui referensi activeMatchTowers ke model baru setelah upgrade berhasil
+                            if action.Type == "Upgrade" and resVal ~= false then
+                                task.wait(0.2)
+                                if targetPos then
+                                    local newObj = nil
+                                    local minDst = math.huge
+                                    for _, obj in ipairs(workspace:GetDescendants()) do
+                                        if obj:IsA("Model") and obj.Parent ~= nil then
+                                            local pos = getModelPosition(obj)
+                                            if pos then
+                                                local dist = (pos - targetPos).Magnitude
+                                                if dist < 20 and dist < minDst then
+                                                    minDst = dist
+                                                    newObj = obj
+                                                end
+                                            end
+                                        end
+                                    end
+                                    if newObj then
+                                        activeMatchTowers[action.TowerIndex] = newObj
+                                    end
+                                end
                             end
 
                             return resVal
