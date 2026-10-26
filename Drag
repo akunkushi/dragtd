@@ -1,5 +1,5 @@
 -- ==========================================================
--- TOWER DEFENSE MACRO SCRIPT (VERSION 5.22 - PRECISE SUB-INSTANCE TARGETING)
+-- TOWER DEFENSE MACRO SCRIPT (VERSION 5.24 - MULTI-TOWER & ARGUMENT FIX)
 -- Designed for Mobile / Delta Executor (Android)
 -- ==========================================================
 
@@ -38,7 +38,7 @@ corner.Parent = mainFrame
 local title = Instance.new("TextLabel")
 title.Size = UDim2.new(1, -40, 0, 40)
 title.BackgroundTransparency = 1
-title.Text = "  Tower Macro Pro v5.22"
+title.Text = "  Tower Macro Pro v5.24"
 title.TextColor3 = Color3.fromRGB(255, 255, 255)
 title.TextSize = 14
 title.Font = Enum.Font.GothamBold
@@ -221,7 +221,7 @@ local function logMessage(msg, color)
     end)
 end
 
-logMessage("Tower Macro Pro v5.22 Loaded. Ready.", Color3.fromRGB(100, 200, 255))
+logMessage("Tower Macro Pro v5.24 Loaded. Ready.", Color3.fromRGB(100, 200, 255))
 
 local isMinimized = true 
 minimizeBtn.MouseButton1Click:Connect(function()
@@ -476,30 +476,23 @@ oldNamecall = hookmetamethod(game, "__namecall", function(self, ...)
                     end
                     
                     if actionType then
-                        local targetInstance = nil
-                        local subInstanceName = ""
+                        local matchedIndex = 1
+                        local objName = "Unknown"
+                        local targetModel = nil
                         
                         for _, arg in ipairs(capturedArgs) do
                             if typeof(arg) == "Instance" then
-                                targetInstance = arg
+                                targetModel = arg
                                 break
                             end
                         end
                         
-                        if targetInstance then
-                            subInstanceName = targetInstance.Name
-                        end
-                        
-                        local targetModel = targetInstance
                         if targetModel and not targetModel:IsA("Model") then
                             local modelParent = targetModel:FindFirstAncestorOfClass("Model")
                             if modelParent then
                                 targetModel = modelParent
                             end
                         end
-                        
-                        local matchedIndex = 1
-                        local objName = "Unknown"
                         
                         if targetModel then
                             pcall(function()
@@ -525,7 +518,6 @@ oldNamecall = hookmetamethod(game, "__namecall", function(self, ...)
                             RemoteName = remote.Name,
                             Method = m,
                             ObjectName = objName,
-                            SubInstanceName = subInstanceName,
                             Args = capturedArgs
                         })
                         
@@ -572,7 +564,6 @@ local function saveMacro()
                     RemoteName = act.RemoteName,
                     Method = act.Method,
                     ObjectName = act.ObjectName,
-                    SubInstanceName = act.SubInstanceName,
                     Position = posData,
                     Args = serializedArgs
                 })
@@ -626,7 +617,6 @@ loadMacro = function(macroName)
                     RemoteName = act.RemoteName,
                     Method = act.Method,
                     ObjectName = act.ObjectName,
-                    SubInstanceName = act.SubInstanceName,
                     Position = realPos,
                     Args = deserializedArgs
                 })
@@ -704,7 +694,6 @@ startPlayback = function()
                             remote:FireServer(unpack(action.Args))
                         end
                         
-                        -- Berikan jeda stabilisasi setelah menempatkan tower
                         task.wait(0.8)
                         
                         local placedObj = nil
@@ -723,7 +712,6 @@ startPlayback = function()
                         
                         return placedObj ~= nil
                     elseif action.Type == "Upgrade" or action.Type == "Sell" then
-                        -- Cari model tower di map berdasarkan koordinat posisi
                         local targetObj = nil
                         local targetPos = recordedPlacePositions[action.TowerIndex]
                         
@@ -761,15 +749,7 @@ startPlayback = function()
                         end
 
                         if targetObj then
-                            -- PRECISE SUB-INSTANCE MATCHING V5.22:
-                            -- Cari part spesifik di dalam model (misalnya part partikel/badan tower yang direkam)
                             local finalTarget = targetObj
-                            if action.SubInstanceName and action.SubInstanceName ~= "" then
-                                local foundSub = targetObj:FindFirstChild(action.SubInstanceName, true)
-                                if foundSub then
-                                    finalTarget = foundSub
-                                end
-                            end
 
                             local playArgs = {}
                             if action.Args then
@@ -793,7 +773,6 @@ startPlayback = function()
                                 resVal = true
                             end
 
-                            -- Jika server mengembalikan true atau tidak error, anggap berhasil
                             if resVal ~= false then
                                 return true
                             end
