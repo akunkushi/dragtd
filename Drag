@@ -1,5 +1,5 @@
 -- ==========================================================
--- TOWER DEFENSE MACRO SCRIPT (VERSION 5.27 - EXACT MODEL-TO-INDEX MAPPING)
+-- TOWER DEFENSE MACRO SCRIPT (VERSION 5.28 - DUAL TARGET PRECISION)
 -- Designed for Mobile / Delta Executor (Android)
 -- ==========================================================
 
@@ -38,7 +38,7 @@ corner.Parent = mainFrame
 local title = Instance.new("TextLabel")
 title.Size = UDim2.new(1, -40, 0, 40)
 title.BackgroundTransparency = 1
-title.Text = "  Tower Macro Pro v5.27"
+title.Text = "  Tower Macro Pro v5.28"
 title.TextColor3 = Color3.fromRGB(255, 255, 255)
 title.TextSize = 14
 title.Font = Enum.Font.GothamBold
@@ -221,7 +221,7 @@ local function logMessage(msg, color)
     end)
 end
 
-logMessage("Tower Macro Pro v5.27 Loaded. Ready.", Color3.fromRGB(100, 200, 255))
+logMessage("Tower Macro Pro v5.28 Loaded. Ready.", Color3.fromRGB(100, 200, 255))
 
 local isMinimized = true 
 minimizeBtn.MouseButton1Click:Connect(function()
@@ -425,7 +425,6 @@ oldNamecall = hookmetamethod(game, "__namecall", function(self, ...)
                         
                         task.wait(0.4)
                         local placePos = nil
-                        local placedModel = nil
                         for _, obj in ipairs(workspace:GetDescendants()) do
                             if obj:IsA("Model") and obj.Parent ~= nil then
                                 local pos = getModelPosition(obj)
@@ -439,7 +438,6 @@ oldNamecall = hookmetamethod(game, "__namecall", function(self, ...)
                                     end
                                     if not alreadyRecorded then
                                         placePos = pos
-                                        placedModel = obj
                                     end
                                 end
                             end
@@ -472,6 +470,7 @@ oldNamecall = hookmetamethod(game, "__namecall", function(self, ...)
                         local matchedIndex = 1
                         local objName = "Unknown"
                         local targetModel = nil
+                        local subInstanceName = ""
                         
                         for _, arg in ipairs(capturedArgs) do
                             if typeof(arg) == "Instance" then
@@ -480,10 +479,13 @@ oldNamecall = hookmetamethod(game, "__namecall", function(self, ...)
                             end
                         end
                         
-                        if targetModel and not targetModel:IsA("Model") then
-                            local modelParent = targetModel:FindFirstAncestorOfClass("Model")
-                            if modelParent then
-                                targetModel = modelParent
+                        if targetModel then
+                            subInstanceName = targetModel.Name
+                            if not targetModel:IsA("Model") then
+                                local modelParent = targetModel:FindFirstAncestorOfClass("Model")
+                                if modelParent then
+                                    targetModel = modelParent
+                                end
                             end
                         end
                         
@@ -511,6 +513,7 @@ oldNamecall = hookmetamethod(game, "__namecall", function(self, ...)
                             RemoteName = remote.Name,
                             Method = m,
                             ObjectName = objName,
+                            SubInstanceName = subInstanceName,
                             Args = capturedArgs
                         })
                         
@@ -557,6 +560,7 @@ local function saveMacro()
                     RemoteName = act.RemoteName,
                     Method = act.Method,
                     ObjectName = act.ObjectName,
+                    SubInstanceName = act.SubInstanceName,
                     Position = posData,
                     Args = serializedArgs
                 })
@@ -610,6 +614,7 @@ loadMacro = function(macroName)
                     RemoteName = act.RemoteName,
                     Method = act.Method,
                     ObjectName = act.ObjectName,
+                    SubInstanceName = act.SubInstanceName,
                     Position = realPos,
                     Args = deserializedArgs
                 })
@@ -743,6 +748,12 @@ startPlayback = function()
 
                         if targetObj then
                             local finalTarget = targetObj
+                            if action.SubInstanceName and action.SubInstanceName ~= "" then
+                                local foundSub = targetObj:FindFirstChild(action.SubInstanceName, true)
+                                if foundSub then
+                                    finalTarget = foundSub
+                                end
+                            end
 
                             local playArgs = {}
                             if action.Args then
