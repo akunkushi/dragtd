@@ -1,5 +1,5 @@
 -- ==========================================================
--- TOWER DEFENSE MACRO SCRIPT (VERSION 5.7 - ADVANCED LEVEL UPGRADE SYNC)
+-- TOWER DEFENSE MACRO SCRIPT (VERSION 5.8 - SMART LEVEL FALLBACK)
 -- Designed for Mobile / Delta Executor (Android)
 -- ==========================================================
 
@@ -38,7 +38,7 @@ corner.Parent = mainFrame
 local title = Instance.new("TextLabel")
 title.Size = UDim2.new(1, -40, 0, 40)
 title.BackgroundTransparency = 1
-title.Text = "  Tower Macro Pro v5.7"
+title.Text = "  Tower Macro Pro v5.8"
 title.TextColor3 = Color3.fromRGB(255, 255, 255)
 title.TextSize = 14
 title.Font = Enum.Font.GothamBold
@@ -221,7 +221,7 @@ local function logMessage(msg, color)
     end)
 end
 
-logMessage("Tower Macro Pro v5.7 Loaded. Ready.", Color3.fromRGB(100, 200, 255))
+logMessage("Tower Macro Pro v5.8 Loaded. Ready.", Color3.fromRGB(100, 200, 255))
 
 local isMinimized = true 
 minimizeBtn.MouseButton1Click:Connect(function()
@@ -765,11 +765,17 @@ startPlayback = function()
                         end
 
                         if targetObj then
+                            -- SMART FALLBACK: Cari sub-instance jika ada, jika tidak, gunakan model/primary part baru
                             local finalTarget = targetObj
                             if action.SubInstanceName and action.SubInstanceName ~= "" then
                                 local foundSub = targetObj:FindFirstChild(action.SubInstanceName, true)
                                 if foundSub then
                                     finalTarget = foundSub
+                                else
+                                    local safePart = targetObj.PrimaryPart or targetObj:FindFirstChildWhichIsA("BasePart", true)
+                                    if safePart then
+                                        finalTarget = safePart
+                                    end
                                 end
                             end
 
@@ -795,7 +801,6 @@ startPlayback = function()
                                 resVal = true
                             end
 
-                            -- PERBAIKAN V5.7: Re-scan setelah upgrade dengan pengecualian model lama & radius ketat (< 8)
                             if action.Type == "Upgrade" and resVal ~= false then
                                 task.wait(0.4)
                                 local targetPos = recordedPlacePositions[action.TowerIndex]
@@ -803,7 +808,6 @@ startPlayback = function()
                                     local minDst = math.huge
                                     local updatedObj = nil
                                     for _, obj in ipairs(workspace:GetDescendants()) do
-                                        -- Pastikan obj adalah model valid dan BUKAN model lama yang baru saja di-upgrade
                                         if obj:IsA("Model") and obj.Parent ~= nil and obj ~= targetObj then
                                             local pos = getModelPosition(obj)
                                             if pos then
