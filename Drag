@@ -1,5 +1,5 @@
 -- ==========================================================
--- TOWER DEFENSE MACRO SCRIPT (VERSION 5.1 - UNIQUE SNAPSHOT MAPPING)
+-- TOWER DEFENSE MACRO SCRIPT (VERSION 5.2 - OPTIMIZED SELL & UPGRADE SYNC)
 -- Designed for Mobile / Delta Executor (Android)
 -- ==========================================================
 
@@ -38,7 +38,7 @@ corner.Parent = mainFrame
 local title = Instance.new("TextLabel")
 title.Size = UDim2.new(1, -40, 0, 40)
 title.BackgroundTransparency = 1
-title.Text = "  Tower Macro Pro v5.1"
+title.Text = "  Tower Macro Pro v5.2"
 title.TextColor3 = Color3.fromRGB(255, 255, 255)
 title.TextSize = 14
 title.Font = Enum.Font.GothamBold
@@ -220,7 +220,7 @@ local function logMessage(msg, color)
     end)
 end
 
-logMessage("Tower Macro Pro v5.1 Loaded. Ready.", Color3.fromRGB(100, 200, 255))
+logMessage("Tower Macro Pro v5.2 Loaded. Ready.", Color3.fromRGB(100, 200, 255))
 
 local isMinimized = true 
 minimizeBtn.MouseButton1Click:Connect(function()
@@ -656,7 +656,6 @@ startPlayback = function()
                     if not remote then return false end
 
                     if action.Type == "Place" then
-                        -- SNAPSHOT: Catat semua model yang sudah ada di workspace sebelum place
                         local existingModels = {}
                         for _, obj in ipairs(workspace:GetDescendants()) do
                             if obj:IsA("Model") then
@@ -672,7 +671,6 @@ startPlayback = function()
                         
                         task.wait(0.5)
                         
-                        -- Cari model baru yang MUNCUL setelah aksi place (menghindari salah pilih tower lama/berdekatan)
                         local placedObj = nil
                         local startTime = tick()
                         while tick() - startTime < 3 and not placedObj do
@@ -696,7 +694,6 @@ startPlayback = function()
                             end
                         end
                         
-                        -- Fallback cari berdasarkan posisi jika snapshot tidak mendeteksi model baru
                         if not placedObj and action.Position then
                             local minDst = math.huge
                             for _, obj in ipairs(workspace:GetDescendants()) do
@@ -729,7 +726,6 @@ startPlayback = function()
                             return false
                         end
                     elseif action.Type == "Upgrade" or action.Type == "Sell" then
-                        -- Ambil instance tower secara presisi dari indeks kronologis activeMatchTowers
                         local targetObj = activeMatchTowers[action.TowerIndex]
                         
                         if not targetObj or not targetObj.Parent then
@@ -753,7 +749,8 @@ startPlayback = function()
 
                         if targetObj then
                             local finalTarget = targetObj
-                            if action.SubInstanceName and action.SubInstanceName ~= "" then
+                            -- PERBAIKAN: Sell selalu memprioritaskan Model utama (targetObj), Upgrade menggunakan sub-instance jika ada
+                            if action.Type == "Upgrade" and action.SubInstanceName and action.SubInstanceName ~= "" then
                                 local foundSub = targetObj:FindFirstChild(action.SubInstanceName, true)
                                 if foundSub then
                                     finalTarget = foundSub
