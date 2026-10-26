@@ -1,5 +1,5 @@
 -- ==========================================================
--- TOWER DEFENSE MACRO SCRIPT (VERSION 4.7 - INSTANCE LOCKING & FAST SYNC)
+-- TOWER DEFENSE MACRO SCRIPT (VERSION 4.8 - STABLE SERVER SYNC & DEBUG)
 -- Designed for Mobile / Delta Executor (Android)
 -- ==========================================================
 
@@ -38,7 +38,7 @@ corner.Parent = mainFrame
 local title = Instance.new("TextLabel")
 title.Size = UDim2.new(1, -40, 0, 40)
 title.BackgroundTransparency = 1
-title.Text = "  Tower Macro Pro v4.7"
+title.Text = "  Tower Macro Pro v4.8"
 title.TextColor3 = Color3.fromRGB(255, 255, 255)
 title.TextSize = 14
 title.Font = Enum.Font.GothamBold
@@ -220,7 +220,7 @@ local function logMessage(msg, color)
     end)
 end
 
-logMessage("Tower Macro Pro v4.7 Loaded. Ready.", Color3.fromRGB(100, 200, 255))
+logMessage("Tower Macro Pro v4.8 Loaded. Ready.", Color3.fromRGB(100, 200, 255))
 
 local isMinimized = true 
 minimizeBtn.MouseButton1Click:Connect(function()
@@ -371,7 +371,7 @@ oldNamecall = hookmetamethod(game, "__namecall", function(self, ...)
                 task.spawn(function()
                     isPlaying = false
                     logMessage("StartMatch terpanggil! Memaksa restart makro untuk match baru...", Color3.fromRGB(100, 200, 255))
-                    task.wait(5)
+                    task.wait(6) -- Diperpanjang agar map baru termuat sempurna
                     
                     local macroName = nameBox.Text ~= "" and nameBox.Text or "makro_1"
                     if loadMacro(macroName) then
@@ -654,10 +654,12 @@ startPlayback = function()
                             remote:FireServer(unpack(action.Args))
                         end
                         
-                        -- Cari model tower yang baru muncul berdasarkan nama atau posisi terdekat
+                        -- Beri jeda lebih lama agar server meregistrasi tower baru secara sempurna di match baru
+                        task.wait(0.8)
+                        
                         local placedObj = nil
                         local startTime = tick()
-                        while tick() - startTime < 2 and not placedObj do
+                        while tick() - startTime < 3 and not placedObj do
                             for _, obj in ipairs(workspace:GetDescendants()) do
                                 if obj:IsA("Model") and obj.Parent ~= nil then
                                     if towerName ~= "" and string.find(obj.Name:lower(), towerName:lower()) then
@@ -679,7 +681,6 @@ startPlayback = function()
                             end
                         end
                         
-                        -- Fallback cari model terdekat jika nama tidak cocok persis
                         if not placedObj and action.Position then
                             local minDst = math.huge
                             for _, obj in ipairs(workspace:GetDescendants()) do
@@ -687,7 +688,7 @@ startPlayback = function()
                                     local pos = getModelPosition(obj)
                                     if pos then
                                         local dist = (pos - action.Position).Magnitude
-                                        if dist < 20 and dist < minDst then
+                                        if dist < 25 and dist < minDst then
                                             minDst = dist
                                             placedObj = obj
                                         end
@@ -703,7 +704,6 @@ startPlayback = function()
                             return false
                         end
                     elseif action.Type == "Upgrade" or action.Type == "Sell" then
-                        -- Ambil tower dari instance yang sudah di-lock atau cari ulang di workspace
                         local targetObj = activeMatchTowers[action.TowerIndex]
                         
                         if not targetObj or not targetObj.Parent then
@@ -715,7 +715,7 @@ startPlayback = function()
                                         local pos = getModelPosition(obj)
                                         if pos then
                                             local dist = (pos - targetPos).Magnitude
-                                            if dist < 25 and dist < minDst then
+                                            if dist < 30 and dist < minDst then
                                                 minDst = dist
                                                 targetObj = obj
                                             end
@@ -740,12 +740,14 @@ startPlayback = function()
                                 playArgs = {targetObj}
                             end
 
+                            local resVal
                             if action.Method == "InvokeServer" then
-                                return remote:InvokeServer(unpack(playArgs))
+                                resVal = remote:InvokeServer(unpack(playArgs))
                             else
                                 remote:FireServer(unpack(playArgs))
-                                return true
+                                resVal = true
                             end
+                            return resVal
                         else
                             return false
                         end
@@ -756,7 +758,7 @@ startPlayback = function()
                     success = true
                 else
                     if attempts == 30 then
-                        logMessage(string.format("[WARNING] Menunggu tower untuk %s...", actionDesc), Color3.fromRGB(255, 150, 50))
+                        logMessage(string.format("[WARNING] Server menolak atau tower belum siap untuk %s...", actionDesc), Color3.fromRGB(255, 150, 50))
                     end
                     task.wait(0.5)
                 end
@@ -812,7 +814,7 @@ task.spawn(function()
     task.wait(2)
     pcall(function()
         if isfile and isfile("TowerMacro_Config.json") then
-            configStr = readfile("TowerMacro_Config.json")
+            local configStr = readfile("TowerMacro_Config.json")
             local config = HttpService:JSONDecode(configStr)
             if config then
                 if config.AutoStart ~= nil then
