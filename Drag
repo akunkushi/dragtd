@@ -1,5 +1,5 @@
 -- ==========================================================
--- TOWER DEFENSE MACRO SCRIPT (VERSION 5.13 - POSITION-FIRST SPATIAL LOOKUP)
+-- TOWER DEFENSE MACRO SCRIPT (VERSION 5.15 - STORM MODEL FIX)
 -- Designed for Mobile / Delta Executor (Android)
 -- ==========================================================
 
@@ -38,7 +38,7 @@ corner.Parent = mainFrame
 local title = Instance.new("TextLabel")
 title.Size = UDim2.new(1, -40, 0, 40)
 title.BackgroundTransparency = 1
-title.Text = "  Tower Macro Pro v5.13"
+title.Text = "  Tower Macro Pro v5.15"
 title.TextColor3 = Color3.fromRGB(255, 255, 255)
 title.TextSize = 14
 title.Font = Enum.Font.GothamBold
@@ -221,7 +221,7 @@ local function logMessage(msg, color)
     end)
 end
 
-logMessage("Tower Macro Pro v5.13 Loaded. Ready.", Color3.fromRGB(100, 200, 255))
+logMessage("Tower Macro Pro v5.15 Loaded. Ready.", Color3.fromRGB(100, 200, 255))
 
 local isMinimized = true 
 minimizeBtn.MouseButton1Click:Connect(function()
@@ -743,9 +743,7 @@ startPlayback = function()
                             return false
                         end
                     elseif action.Type == "Upgrade" or action.Type == "Sell" then
-                        -- POSITION-FIRST LOOKUP V5.13: 
-                        -- Selalu cari tower langsung berdasarkan koordinat posisinya di map, 
-                        -- sehingga kebal total terhadap perubahan nama (Crystal_1 -> Crystal_2, dll) dan penghancuran model lama!
+                        -- Cari model Storm di map berdasarkan koordinat posisi penempatannya
                         local targetObj = nil
                         local targetPos = recordedPlacePositions[action.TowerIndex]
                         
@@ -756,7 +754,7 @@ startPlayback = function()
                                     local pos = getModelPosition(obj)
                                     if pos then
                                         local dist = (pos - targetPos).Magnitude
-                                        if dist < 12 and dist < minDst then
+                                        if dist < 15 and dist < minDst then
                                             minDst = dist
                                             targetObj = obj
                                         end
@@ -765,14 +763,13 @@ startPlayback = function()
                             end
                         end
                         
-                        -- Fallback ke activeMatchTowers jika posisi belum terdeteksi
                         if not targetObj then
                             targetObj = activeMatchTowers[action.TowerIndex]
                         end
 
                         if targetObj then
-                            -- Ambil BasePart atau PrimaryPart yang valid dari model saat ini
-                            local finalTarget = targetObj.PrimaryPart or targetObj:FindFirstChildWhichIsA("BasePart", true) or targetObj
+                            -- Kirim model Storm secara utuh (seperti Storm_1, Storm_2, dst)
+                            local finalTarget = targetObj
 
                             local playArgs = {}
                             if action.Args then
