@@ -1,5 +1,5 @@
 -- ==========================================================
--- TOWER DEFENSE MACRO SCRIPT (VERSION 4.8 - STABLE SERVER SYNC & DEBUG)
+-- TOWER DEFENSE MACRO SCRIPT (VERSION 4.9 - EXACT PART MAPPING & SERVER SYNC)
 -- Designed for Mobile / Delta Executor (Android)
 -- ==========================================================
 
@@ -38,7 +38,7 @@ corner.Parent = mainFrame
 local title = Instance.new("TextLabel")
 title.Size = UDim2.new(1, -40, 0, 40)
 title.BackgroundTransparency = 1
-title.Text = "  Tower Macro Pro v4.8"
+title.Text = "  Tower Macro Pro v4.9"
 title.TextColor3 = Color3.fromRGB(255, 255, 255)
 title.TextSize = 14
 title.Font = Enum.Font.GothamBold
@@ -220,7 +220,7 @@ local function logMessage(msg, color)
     end)
 end
 
-logMessage("Tower Macro Pro v4.8 Loaded. Ready.", Color3.fromRGB(100, 200, 255))
+logMessage("Tower Macro Pro v4.9 Loaded. Ready.", Color3.fromRGB(100, 200, 255))
 
 local isMinimized = true 
 minimizeBtn.MouseButton1Click:Connect(function()
@@ -371,7 +371,7 @@ oldNamecall = hookmetamethod(game, "__namecall", function(self, ...)
                 task.spawn(function()
                     isPlaying = false
                     logMessage("StartMatch terpanggil! Memaksa restart makro untuk match baru...", Color3.fromRGB(100, 200, 255))
-                    task.wait(6) -- Diperpanjang agar map baru termuat sempurna
+                    task.wait(6)
                     
                     local macroName = nameBox.Text ~= "" and nameBox.Text or "makro_1"
                     if loadMacro(macroName) then
@@ -441,6 +441,9 @@ oldNamecall = hookmetamethod(game, "__namecall", function(self, ...)
                     
                     if actionType then
                         local targetInstance = nil
+                        local subInstanceName = ""
+                        local subInstanceClass = ""
+                        
                         for _, arg in ipairs(capturedArgs) do
                             if typeof(arg) == "Instance" then
                                 targetInstance = arg
@@ -448,22 +451,28 @@ oldNamecall = hookmetamethod(game, "__namecall", function(self, ...)
                             end
                         end
                         
-                        if targetInstance and not targetInstance:IsA("Model") then
-                            local modelParent = targetInstance:FindFirstAncestorOfClass("Model")
+                        if targetInstance then
+                            subInstanceName = targetInstance.Name
+                            subInstanceClass = targetInstance.ClassName
+                        end
+                        
+                        local targetModel = targetInstance
+                        if targetModel and not targetModel:IsA("Model") then
+                            local modelParent = targetModel:FindFirstAncestorOfClass("Model")
                             if modelParent then
-                                targetInstance = modelParent
+                                targetModel = modelParent
                             end
                         end
                         
                         local matchedIndex = 1
                         local objName = "Unknown"
                         
-                        if targetInstance then
+                        if targetModel then
                             pcall(function()
-                                objName = targetInstance.Name
+                                objName = targetModel.Name
                             end)
                             
-                            local targetPos = getModelPosition(targetInstance)
+                            local targetPos = getModelPosition(targetModel)
                             if targetPos then
                                 local minDistance = math.huge
                                 for idx, pos in pairs(recordedPlacePositions) do
@@ -482,6 +491,8 @@ oldNamecall = hookmetamethod(game, "__namecall", function(self, ...)
                             RemoteName = remote.Name,
                             Method = m,
                             ObjectName = objName,
+                            SubInstanceName = subInstanceName,
+                            SubInstanceClass = subInstanceClass,
                             Args = capturedArgs
                         })
                         
@@ -528,6 +539,8 @@ local function saveMacro()
                     RemoteName = act.RemoteName,
                     Method = act.Method,
                     ObjectName = act.ObjectName,
+                    SubInstanceName = act.SubInstanceName,
+                    SubInstanceClass = act.SubInstanceClass,
                     Position = posData,
                     Args = serializedArgs
                 })
@@ -581,6 +594,8 @@ loadMacro = function(macroName)
                     RemoteName = act.RemoteName,
                     Method = act.Method,
                     ObjectName = act.ObjectName,
+                    SubInstanceName = act.SubInstanceName,
+                    SubInstanceClass = act.SubInstanceClass,
                     Position = realPos,
                     Args = deserializedArgs
                 })
@@ -654,8 +669,7 @@ startPlayback = function()
                             remote:FireServer(unpack(action.Args))
                         end
                         
-                        -- Beri jeda lebih lama agar server meregistrasi tower baru secara sempurna di match baru
-                        task.wait(0.8)
+                        task.wait(1.0) -- Jeda stabilisasi server match baru
                         
                         local placedObj = nil
                         local startTime = tick()
@@ -726,6 +740,15 @@ startPlayback = function()
                         end
 
                         if targetObj then
+                            -- Cari sub-instance / part spesifik yang dulunya diklik (misal: Hitbox/Part)
+                            local finalTarget = targetObj
+                            if action.SubInstanceName and action.SubInstanceName ~= "" then
+                                local foundSub = targetObj:FindFirstChild(action.SubInstanceName, true)
+                                if foundSub then
+                                    finalTarget = foundSub
+                                end
+                            end
+
                             local playArgs = {}
                             if action.Args then
                                 for k, v in pairs(action.Args) do
@@ -733,11 +756,11 @@ startPlayback = function()
                                 end
                                 for k, v in pairs(playArgs) do
                                     if v == "__TOWER_INSTANCE__" or typeof(v) == "Instance" then
-                                        playArgs[k] = targetObj
+                                        playArgs[k] = finalTarget
                                     end
                                 end
                             else
-                                playArgs = {targetObj}
+                                playArgs = {finalTarget}
                             end
 
                             local resVal
@@ -758,7 +781,7 @@ startPlayback = function()
                     success = true
                 else
                     if attempts == 30 then
-                        logMessage(string.format("[WARNING] Server menolak atau tower belum siap untuk %s...", actionDesc), Color3.fromRGB(255, 150, 50))
+                        logMessage(string.format("[WARNING] Server menolak upgrade untuk %s...", actionDesc), Color3.fromRGB(255, 150, 50))
                     end
                     task.wait(0.5)
                 end
