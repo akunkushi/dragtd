@@ -1,5 +1,5 @@
 -- ==========================================================
--- TOWER DEFENSE MACRO SCRIPT (VERSION 5.6 - PLAY AGAIN AUTO TRIGGER)
+-- TOWER DEFENSE MACRO SCRIPT (VERSION 5.7 - ADVANCED LEVEL UPGRADE SYNC)
 -- Designed for Mobile / Delta Executor (Android)
 -- ==========================================================
 
@@ -38,7 +38,7 @@ corner.Parent = mainFrame
 local title = Instance.new("TextLabel")
 title.Size = UDim2.new(1, -40, 0, 40)
 title.BackgroundTransparency = 1
-title.Text = "  Tower Macro Pro v5.6"
+title.Text = "  Tower Macro Pro v5.7"
 title.TextColor3 = Color3.fromRGB(255, 255, 255)
 title.TextSize = 14
 title.Font = Enum.Font.GothamBold
@@ -221,7 +221,7 @@ local function logMessage(msg, color)
     end)
 end
 
-logMessage("Tower Macro Pro v5.6 Loaded. Ready.", Color3.fromRGB(100, 200, 255))
+logMessage("Tower Macro Pro v5.7 Loaded. Ready.", Color3.fromRGB(100, 200, 255))
 
 local isMinimized = true 
 minimizeBtn.MouseButton1Click:Connect(function()
@@ -379,7 +379,6 @@ oldNamecall = hookmetamethod(game, "__namecall", function(self, ...)
     local success = res[1]
     local serverResult = res[2]
     
-    -- Memicu restart makro hanya setelah PlayAgain diklik/dipanggil
     if tostring(self.Name) == "PlayAgain" and (method == "FireServer" or method == "InvokeServer") then
         if autoPlayMatchEnabled and not isRecording then
             local currentTime = tick()
@@ -389,7 +388,7 @@ oldNamecall = hookmetamethod(game, "__namecall", function(self, ...)
                 task.spawn(function()
                     isPlaying = false
                     logMessage("PlayAgain diklik! Memulai ulang makro untuk match baru...", Color3.fromRGB(100, 200, 255))
-                    task.wait(6) -- Waktu tunggu loading masuk match baru
+                    task.wait(6)
                     
                     local macroName = nameBox.Text ~= "" and nameBox.Text or "makro_1"
                     if loadMacro(macroName) then
@@ -796,18 +795,20 @@ startPlayback = function()
                                 resVal = true
                             end
 
+                            -- PERBAIKAN V5.7: Re-scan setelah upgrade dengan pengecualian model lama & radius ketat (< 8)
                             if action.Type == "Upgrade" and resVal ~= false then
-                                task.wait(0.2)
+                                task.wait(0.4)
                                 local targetPos = recordedPlacePositions[action.TowerIndex]
                                 if targetPos then
                                     local minDst = math.huge
                                     local updatedObj = nil
                                     for _, obj in ipairs(workspace:GetDescendants()) do
-                                        if obj:IsA("Model") and obj.Parent ~= nil then
+                                        -- Pastikan obj adalah model valid dan BUKAN model lama yang baru saja di-upgrade
+                                        if obj:IsA("Model") and obj.Parent ~= nil and obj ~= targetObj then
                                             local pos = getModelPosition(obj)
                                             if pos then
                                                 local dist = (pos - targetPos).Magnitude
-                                                if dist < 12 and dist < minDst then
+                                                if dist < 8 and dist < minDst then
                                                     minDst = dist
                                                     updatedObj = obj
                                                 end
