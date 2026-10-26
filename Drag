@@ -1,5 +1,5 @@
 -- ==========================================================
--- TOWER DEFENSE MACRO SCRIPT (VERSION 5.9 - SAFE MODEL FALLBACK FIX)
+-- TOWER DEFENSE MACRO SCRIPT (VERSION 5.11 - SMART BASEPART RESOLVER)
 -- Designed for Mobile / Delta Executor (Android)
 -- ==========================================================
 
@@ -38,7 +38,7 @@ corner.Parent = mainFrame
 local title = Instance.new("TextLabel")
 title.Size = UDim2.new(1, -40, 0, 40)
 title.BackgroundTransparency = 1
-title.Text = "  Tower Macro Pro v5.9"
+title.Text = "  Tower Macro Pro v5.11"
 title.TextColor3 = Color3.fromRGB(255, 255, 255)
 title.TextSize = 14
 title.Font = Enum.Font.GothamBold
@@ -221,7 +221,7 @@ local function logMessage(msg, color)
     end)
 end
 
-logMessage("Tower Macro Pro v5.9 Loaded. Ready.", Color3.fromRGB(100, 200, 255))
+logMessage("Tower Macro Pro v5.11 Loaded. Ready.", Color3.fromRGB(100, 200, 255))
 
 local isMinimized = true 
 minimizeBtn.MouseButton1Click:Connect(function()
@@ -765,15 +765,18 @@ startPlayback = function()
                         end
 
                         if targetObj then
-                            -- SMART FALLBACK FIX: Gunakan sub-instance jika ada, jika tidak, fallback aman ke Model Utama (targetObj)
+                            -- SMART RESOLVER V5.11: Cari sub-instance jika ada, 
+                            -- dan pastikan hasil akhirnya SELALU berupa BasePart valid (bukan Model mentah).
                             local finalTarget = targetObj
                             if action.SubInstanceName and action.SubInstanceName ~= "" then
                                 local foundSub = targetObj:FindFirstChild(action.SubInstanceName, true)
                                 if foundSub then
                                     finalTarget = foundSub
-                                else
-                                    finalTarget = targetObj
                                 end
+                            end
+
+                            if finalTarget and finalTarget:IsA("Model") then
+                                finalTarget = finalTarget.PrimaryPart or finalTarget:FindFirstChildWhichIsA("BasePart", true) or finalTarget
                             end
 
                             local playArgs = {}
@@ -799,21 +802,26 @@ startPlayback = function()
                             end
 
                             if action.Type == "Upgrade" and resVal ~= false then
-                                task.wait(0.4)
                                 local targetPos = recordedPlacePositions[action.TowerIndex]
                                 if targetPos then
-                                    local minDst = math.huge
                                     local updatedObj = nil
-                                    for _, obj in ipairs(workspace:GetDescendants()) do
-                                        if obj:IsA("Model") and obj.Parent ~= nil and obj ~= targetObj then
-                                            local pos = getModelPosition(obj)
-                                            if pos then
-                                                local dist = (pos - targetPos).Magnitude
-                                                if dist < 8 and dist < minDst then
-                                                    minDst = dist
-                                                    updatedObj = obj
+                                    local scanStart = tick()
+                                    while tick() - scanStart < 2 and not updatedObj do
+                                        local minDst = math.huge
+                                        for _, obj in ipairs(workspace:GetDescendants()) do
+                                            if obj:IsA("Model") and obj.Parent ~= nil and obj ~= targetObj then
+                                                local pos = getModelPosition(obj)
+                                                if pos then
+                                                    local dist = (pos - targetPos).Magnitude
+                                                    if dist < 10 and dist < minDst then
+                                                        minDst = dist
+                                                        updatedObj = obj
+                                                    end
                                                 end
                                             end
+                                        end
+                                        if not updatedObj then
+                                            task.wait(0.1)
                                         end
                                     end
                                     if updatedObj then
