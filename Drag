@@ -1,5 +1,5 @@
 -- ==========================================================
--- TOWER DEFENSE MACRO SCRIPT (VERSION 5.12 - SMART FORM-CHANGE FALLBACK)
+-- TOWER DEFENSE MACRO SCRIPT (VERSION 5.13 - POSITION-FIRST SPATIAL LOOKUP)
 -- Designed for Mobile / Delta Executor (Android)
 -- ==========================================================
 
@@ -38,7 +38,7 @@ corner.Parent = mainFrame
 local title = Instance.new("TextLabel")
 title.Size = UDim2.new(1, -40, 0, 40)
 title.BackgroundTransparency = 1
-title.Text = "  Tower Macro Pro v5.12"
+title.Text = "  Tower Macro Pro v5.13"
 title.TextColor3 = Color3.fromRGB(255, 255, 255)
 title.TextSize = 14
 title.Font = Enum.Font.GothamBold
@@ -221,7 +221,7 @@ local function logMessage(msg, color)
     end)
 end
 
-logMessage("Tower Macro Pro v5.12 Loaded. Ready.", Color3.fromRGB(100, 200, 255))
+logMessage("Tower Macro Pro v5.13 Loaded. Ready.", Color3.fromRGB(100, 200, 255))
 
 local isMinimized = true 
 minimizeBtn.MouseButton1Click:Connect(function()
@@ -743,44 +743,36 @@ startPlayback = function()
                             return false
                         end
                     elseif action.Type == "Upgrade" or action.Type == "Sell" then
-                        local targetObj = activeMatchTowers[action.TowerIndex]
+                        -- POSITION-FIRST LOOKUP V5.13: 
+                        -- Selalu cari tower langsung berdasarkan koordinat posisinya di map, 
+                        -- sehingga kebal total terhadap perubahan nama (Crystal_1 -> Crystal_2, dll) dan penghancuran model lama!
+                        local targetObj = nil
+                        local targetPos = recordedPlacePositions[action.TowerIndex]
                         
-                        if not targetObj or not targetObj.Parent then
-                            local targetPos = recordedPlacePositions[action.TowerIndex]
-                            if targetPos then
-                                local minDst = math.huge
-                                for _, obj in ipairs(workspace:GetDescendants()) do
-                                    if obj:IsA("Model") and obj.Parent ~= nil then
-                                        local pos = getModelPosition(obj)
-                                        if pos then
-                                            local dist = (pos - targetPos).Magnitude
-                                            if dist < 15 and dist < minDst then
-                                                minDst = dist
-                                                targetObj = obj
-                                            end
+                        if targetPos then
+                            local minDst = math.huge
+                            for _, obj in ipairs(workspace:GetDescendants()) do
+                                if obj:IsA("Model") and obj.Parent ~= nil then
+                                    local pos = getModelPosition(obj)
+                                    if pos then
+                                        local dist = (pos - targetPos).Magnitude
+                                        if dist < 12 and dist < minDst then
+                                            minDst = dist
+                                            targetObj = obj
                                         end
                                     end
                                 end
                             end
                         end
+                        
+                        -- Fallback ke activeMatchTowers jika posisi belum terdeteksi
+                        if not targetObj then
+                            targetObj = activeMatchTowers[action.TowerIndex]
+                        end
 
                         if targetObj then
-                            -- SMART FORM-CHANGE FALLBACK V5.12:
-                            -- Cari sub-instance part. Jika tidak ditemukan (karena tower berubah bentuk/nama di level tinggi),
-                            -- ambil PrimaryPart atau BasePart pertama dari model tersebut secara aman.
-                            local finalTarget = targetObj
-                            if action.SubInstanceName and action.SubInstanceName ~= "" then
-                                local foundSub = targetObj:FindFirstChild(action.SubInstanceName, true)
-                                if foundSub then
-                                    finalTarget = foundSub
-                                else
-                                    finalTarget = targetObj.PrimaryPart or targetObj:FindFirstChildWhichIsA("BasePart", true) or targetObj
-                                end
-                            end
-
-                            if finalTarget and finalTarget:IsA("Model") then
-                                finalTarget = finalTarget.PrimaryPart or finalTarget:FindFirstChildWhichIsA("BasePart", true) or finalTarget
-                            end
+                            -- Ambil BasePart atau PrimaryPart yang valid dari model saat ini
+                            local finalTarget = targetObj.PrimaryPart or targetObj:FindFirstChildWhichIsA("BasePart", true) or targetObj
 
                             local playArgs = {}
                             if action.Args then
@@ -802,35 +794,6 @@ startPlayback = function()
                             else
                                 remote:FireServer(unpack(playArgs))
                                 resVal = true
-                            end
-
-                            if action.Type == "Upgrade" and resVal ~= false then
-                                local targetPos = recordedPlacePositions[action.TowerIndex]
-                                if targetPos then
-                                    local updatedObj = nil
-                                    local scanStart = tick()
-                                    while tick() - scanStart < 2 and not updatedObj do
-                                        local minDst = math.huge
-                                        for _, obj in ipairs(workspace:GetDescendants()) do
-                                            if obj:IsA("Model") and obj.Parent ~= nil and obj ~= targetObj then
-                                                local pos = getModelPosition(obj)
-                                                if pos then
-                                                    local dist = (pos - targetPos).Magnitude
-                                                    if dist < 10 and dist < minDst then
-                                                        minDst = dist
-                                                        updatedObj = obj
-                                                    end
-                                                end
-                                            end
-                                        end
-                                        if not updatedObj then
-                                            task.wait(0.1)
-                                        end
-                                    end
-                                    if updatedObj then
-                                        activeMatchTowers[action.TowerIndex] = updatedObj
-                                    end
-                                end
                             end
 
                             return resVal
