@@ -1,4 +1,4 @@
--- Roblox Tower Defense Macro Script v2.5 (Logical Return Validation Fix)
+-- Roblox Tower Defense Macro Script v2.6 (Multi-Macro Save/Load & Auto-Play Select)
 -- Compatible with Delta Mobile Executor
 
 local Players = game:GetService("Players")
@@ -91,7 +91,7 @@ end
 -- Main Frame
 local MainFrame = Instance.new("Frame")
 MainFrame.Name = "MainFrame"
-MainFrame.Size = UDim2.new(0, 310, 0, 480)
+MainFrame.Size = UDim2.new(0, 310, 0, 500)
 MainFrame.Position = UDim2.new(0, 15, 0, 80)
 MainFrame.BackgroundColor3 = Color3.fromRGB(25, 25, 30)
 MainFrame.BorderSizePixel = 0
@@ -130,7 +130,7 @@ TitleText.Size = UDim2.new(1, -80, 1, 0)
 TitleText.Position = UDim2.new(0, 12, 0, 0)
 TitleText.BackgroundTransparency = 1
 TitleText.Font = Enum.Font.GothamBold
-TitleText.Text = "TD Macro v2.5 (Strict Wait)"
+TitleText.Text = "TD Macro v2.6 (Multi-Macro)"
 TitleText.TextColor3 = Color3.fromRGB(240, 240, 245)
 TitleText.TextSize = 12
 TitleText.TextXAlignment = Enum.TextXAlignment.Left
@@ -247,9 +247,9 @@ local PlayCorner = Instance.new("UICorner")
 PlayCorner.CornerRadius = UDim.new(0, 6)
 PlayCorner.Parent = PlayBtn
 
--- Save / Load UI Section
+-- Save / Load / TextBox Section
 local SaveBox = Instance.new("TextBox")
-SaveBox.Size = UDim2.new(0.65, 0, 0, 28)
+SaveBox.Size = UDim2.new(0.48, 0, 0, 28)
 SaveBox.Position = UDim2.new(0, 10, 0, 68)
 SaveBox.BackgroundColor3 = Color3.fromRGB(35, 35, 42)
 SaveBox.Font = Enum.Font.Gotham
@@ -264,8 +264,8 @@ SaveBoxCorner.CornerRadius = UDim.new(0, 6)
 SaveBoxCorner.Parent = SaveBox
 
 local SaveBtn = Instance.new("TextButton")
-SaveBtn.Size = UDim2.new(0.31, 0, 0, 28)
-SaveBtn.Position = UDim2.new(0.69, 0, 0, 68)
+SaveBtn.Size = UDim2.new(0.23, 0, 0, 28)
+SaveBtn.Position = UDim2.new(0.50, 0, 0, 68)
 SaveBtn.BackgroundColor3 = Color3.fromRGB(60, 100, 180)
 SaveBtn.Font = Enum.Font.GothamBold
 SaveBtn.Text = "Save"
@@ -276,6 +276,20 @@ SaveBtn.Parent = ContentContainer
 local SaveBtnCorner = Instance.new("UICorner")
 SaveBtnCorner.CornerRadius = UDim.new(0, 6)
 SaveBtnCorner.Parent = SaveBtn
+
+local LoadBtn = Instance.new("TextButton")
+LoadBtn.Size = UDim2.new(0.23, 0, 0, 28)
+LoadBtn.Position = UDim2.new(0.75, 0, 0, 68)
+LoadBtn.BackgroundColor3 = Color3.fromRGB(100, 60, 180)
+LoadBtn.Font = Enum.Font.GothamBold
+LoadBtn.Text = "Load"
+LoadBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
+LoadBtn.TextSize = 11
+LoadBtn.Parent = ContentContainer
+
+local LoadBtnCorner = Instance.new("UICorner")
+LoadBtnCorner.CornerRadius = UDim.new(0, 6)
+LoadBtnCorner.Parent = LoadBtn
 
 -- Auto Play on Rejoin Toggle
 local AutoPlayBtn = Instance.new("TextButton")
@@ -367,7 +381,7 @@ MinimizeBtn.MouseButton1Click:Connect(function()
         MinimizeBtn.Text = "+"
         addLog("UI Minimized")
     else
-        MainFrame.Size = UDim2.new(0, 310, 0, 480)
+        MainFrame.Size = UDim2.new(0, 310, 0, 500)
         ContentContainer.Visible = true
         MinimizeBtn.Text = "-"
         addLog("UI Restored")
@@ -378,9 +392,9 @@ CloseBtn.MouseButton1Click:Connect(function()
     ScreenGui:Destroy()
 end)
 
-addLog("Script v2.5 initialized successfully.")
+addLog("Script v2.6 initialized successfully.")
 
--- Function to Save Macro
+-- Save Macro Function
 local function saveCurrentMacro()
     local name = SaveBox.Text
     if name == "" then name = "macro_default" end
@@ -393,7 +407,7 @@ local function saveCurrentMacro()
     end)
     
     if success then
-        addLog("Successfully saved macro: " .. name .. " (" .. #recordedActions .. " actions)")
+        addLog("Successfully saved: " .. name .. " (" .. #recordedActions .. " actions)")
     else
         addLog("Failed to save macro: " .. tostring(err))
     end
@@ -401,20 +415,44 @@ end
 
 SaveBtn.MouseButton1Click:Connect(saveCurrentMacro)
 
+-- Load Macro Function
+local function loadSelectedMacro()
+    local name = SaveBox.Text
+    if name == "" then name = "macro_default" end
+    selectedMacroName = name
+    
+    local path = "TD_Macro_Saves/" .. name .. ".json"
+    if isfile(path) then
+        local success, err = pcall(function()
+            recordedActions = deserialize(HttpService:JSONDecode(readfile(path)))
+        end)
+        if success then
+            addLog("Loaded macro: " .. name .. " (" .. #recordedActions .. " actions)")
+            StatusLabel.Text = string.format("Status: Idle | Actions: %d", #recordedActions)
+        else
+            addLog("Failed to load JSON: " .. tostring(err))
+        end
+    else
+        addLog("Macro file not found: " .. name)
+    end
+end
+
+LoadBtn.MouseButton1Click:Connect(loadSelectedMacro)
+
 -- Auto Play on Rejoin Toggle Handler
 AutoPlayBtn.MouseButton1Click:Connect(function()
     autoPlayOnRejoin = not autoPlayOnRejoin
     if autoPlayOnRejoin then
         AutoPlayBtn.BackgroundColor3 = Color3.fromRGB(40, 150, 70)
         AutoPlayBtn.Text = "Auto Play on Rejoin: ON"
-        addLog("Auto Play on Rejoin enabled.")
+        addLog("Auto Play on Rejoin enabled for: " .. SaveBox.Text)
     else
         AutoPlayBtn.BackgroundColor3 = Color3.fromRGB(180, 50, 50)
         AutoPlayBtn.Text = "Auto Play on Rejoin: OFF"
         addLog("Auto Play on Rejoin disabled.")
     end
     
-    -- Save Config
+    -- Save Config (menyimpan status dan nama makro yang sedang dipilih)
     pcall(function()
         local config = {
             autoPlay = autoPlayOnRejoin,
@@ -436,20 +474,13 @@ local function startPlayback()
         return
     end
     
-    -- Load macro from file if recordedActions is empty
+    -- Jika recordedActions kosong saat Play ditekan, coba load otomatis dari kotak teks
     if #recordedActions == 0 then
-        local name = SaveBox.Text ~= "" and SaveBox.Text or "macro_1"
-        local path = "TD_Macro_Saves/" .. name .. ".json"
-        if isfile(path) then
-            pcall(function()
-                recordedActions = deserialize(HttpService:JSONDecode(readfile(path)))
-                addLog("Loaded macro from file: " .. name .. " (" .. #recordedActions .. " actions)")
-            end)
-        end
+        loadSelectedMacro()
     end
     
     if #recordedActions == 0 then
-        addLog("No recorded actions found!")
+        addLog("No recorded actions found to play!")
         return
     end
     
@@ -457,10 +488,10 @@ local function startPlayback()
     PlayBtn.BackgroundColor3 = Color3.fromRGB(60, 200, 100)
     PlayBtn.Text = "Playing..."
     StatusLabel.Text = "Status: Playing..."
-    addLog(string.format("Starting strict playback (%d actions)...", #recordedActions))
+    addLog(string.format("Starting playback of '%s' (%d actions)...", selectedMacroName, #recordedActions))
     
     task.spawn(function()
-        task.wait(3) -- Jeda awal agar match baru siap
+        task.wait(3) -- Jeda agar match baru siap sepenuhnya
         
         for i, action in ipairs(recordedActions) do
             if not isPlaying then break end
@@ -495,14 +526,13 @@ local function startPlayback()
                 desc = "Sell " .. tostring(action.args[1])
             end
             
-            -- STRICT RETRY LOOP: Terus mencoba sampai server benar-benar merespons sukses (bukan false)
+            -- STRICT RETRY LOOP
             while isPlaying and not success do
                 if remote then
                     local res, serverResult = pcall(function()
                         return remote:InvokeServer(unpack(deserialize(action.args)))
                     end)
                     
-                    -- Pastikan pcall berhasil DAN server tidak mengembalikan nilai false (cash kurang / gagal)
                     if res and serverResult ~= false then
                         success = true
                         addLog(string.format("[PLAY] Success %s (#%d)", desc, i))
@@ -521,7 +551,7 @@ local function startPlayback()
         isPlaying = false
         PlayBtn.BackgroundColor3 = Color3.fromRGB(40, 150, 70)
         PlayBtn.Text = "Play"
-        StatusLabel.Text = string.format("Status: Idle | Recorded: %d", #recordedActions)
+        StatusLabel.Text = string.format("Status: Idle | Actions: %d", #recordedActions)
         addLog("Playback finished.")
     end)
 end
@@ -547,7 +577,7 @@ task.spawn(function()
                     if isfile(macroPath) then
                         local decoded = HttpService:JSONDecode(readfile(macroPath))
                         recordedActions = deserialize(decoded)
-                        addLog("Auto-loaded saved macro: " .. config.macroName .. " (" .. #recordedActions .. " actions)")
+                        addLog("Auto-loaded macro for rejoin: " .. config.macroName .. " (" .. #recordedActions .. " actions)")
                         
                         addLog("Auto-starting playback from rejoin in 3 seconds...")
                         task.spawn(startPlayback)
@@ -558,7 +588,7 @@ task.spawn(function()
     end)
 end)
 
--- Namecall Hook to Record Successful Place, Upgrade, and Sell Actions
+-- Namecall Hook to Record Successful Actions
 local oldNamecall
 oldNamecall = hookmetamethod(game, "__namecall", function(self, ...)
     local method = getnamecallmethod()
@@ -575,7 +605,6 @@ oldNamecall = hookmetamethod(game, "__namecall", function(self, ...)
             
             setnamecallmethod(method)
             
-            -- Hanya catat jika pcall sukses dan server tidak mengembalikan nilai false
             if success and serverResult ~= false then
                 local copiedArgs = deepCopy(args)
                 task.spawn(function()
@@ -600,7 +629,6 @@ oldNamecall = hookmetamethod(game, "__namecall", function(self, ...)
                 end)
                 return unpack(results, 2)
             else
-                -- Jika gagal/ditolak server, kembalikan respons tanpa merekamnya
                 return unpack(results, 2)
             end
         end
@@ -610,7 +638,7 @@ oldNamecall = hookmetamethod(game, "__namecall", function(self, ...)
     return oldNamecall(self, ...)
 end)
 
--- Record Button Click Handler
+-- Record Button Click Handler (Auto-Save on Stop using current textbox name)
 RecordBtn.MouseButton1Click:Connect(function()
     if isPlaying then
         addLog("Cannot record while playing!")
@@ -630,6 +658,7 @@ RecordBtn.MouseButton1Click:Connect(function()
         StatusLabel.Text = string.format("Status: Idle | Recorded: %d", #recordedActions)
         addLog(string.format("Stopped recording. Total: %d actions", #recordedActions))
         
+        -- Auto-save dengan nama sesuai teks pada kotak teks
         saveCurrentMacro()
     end
 end)
