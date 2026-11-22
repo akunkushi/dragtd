@@ -42,15 +42,17 @@ end
 
 -- 2. Fungsi klik tombol di berbagai jenis executor
 local function clickButton(btn)
+	if not btn then return end
 	if firesignal then
-		firesignal(btn.MouseButton1Click)
-		firesignal(btn.Activated)
-	elseif getconnections then
+		pcall(function() firesignal(btn.MouseButton1Click) end)
+		pcall(function() firesignal(btn.Activated) end)
+	end
+	if getconnections then
 		for _, conn in ipairs(getconnections(btn.MouseButton1Click)) do
-			conn:Fire()
+			pcall(function() conn:Fire() end)
 		end
 		for _, conn in ipairs(getconnections(btn.Activated)) do
-			conn:Fire()
+			pcall(function() conn:Fire() end)
 		end
 	end
 end
@@ -69,21 +71,12 @@ local function isActuallyVisible(guiObj)
 	return true
 end
 
--- 4. Fungsi utama memproses UI AntiMacro
-local isSolving = false
-
-local function solveAntiMacro(antiMacroGui)
-	if isSolving then return end
-	if not antiMacroGui or not antiMacroGui.Parent then return end
-	if antiMacroGui:IsA("ScreenGui") and not antiMacroGui.Enabled then return end
-
-	isSolving = true
-	task.wait(0.6) -- Tunggu animasi pop-up dan angka selesai muncul
-
+-- 4. Logika AFK CHECK (mencocokkan angka target dengan tombol angka)
+local function solveNumberAntiMacro(rootGui)
 	local numberLabels = {}
 	local numberButtons = {}
 
-	for _, obj in ipairs(antiMacroGui:GetDescendants()) do
+	for _, obj in ipairs(rootGui:GetDescendants()) do
 		if obj:IsA("TextLabel") and isActuallyVisible(obj) then
 			local cleanText = tostring(obj.Text):match("^%s*(%d+)%s*$")
 			if cleanText and not obj:FindFirstAncestorWhichIsA("TextButton") and not obj:FindFirstAncestorWhichIsA("ImageButton") then
@@ -113,78 +106,106 @@ local function solveAntiMacro(antiMacroGui)
 			if item.text == targetNumber then
 				print("[Auto-AFK] Angka target:", targetNumber, "-> Mengklik tombol:", item.text)
 				clickButton(item.btn)
-				break
+				return true
 			end
 		end
 	end
 
-	task.wait(1) -- Cooldown singkat agar tidak spam klik
-	isSolving = false
+	return false
 end
 
--- 5. Pasang listener pada objek AntiMacro
+-- 5. Logika REWARDS PAUSED (klik tombol yang muncul saat reward terhenti)
+local function solveRewardsPaused()
+	for _, gui in ipairs(playerGui:GetChildren()) do
+		-- Abaikan indikator milik skrip ini sendiri
+		if gui.Name ~= "AntiMacroStatusIndicator" then
+			for _, desc in ipairs(gui:GetDescendants()) do
+				if desc:IsA("TextLabel") and isActuallyVisible(desc) then
+					local upperText = tostring(desc.Text):upper()
+					if upperText:find("REWARDS PAUSED") or upperText:find("PAUSED") then
+						-- Cari container terdekat (Frame/CanvasGroup/ScreenGui)
+						local container = desc:FindFirstAncestorWhichIsA("Frame")
+							or desc:FindFirstAncestorWhichIsA("CanvasGroup")
+							or gui
+
+						-- Cari tombol yang terlihat di dalam container tersebut
+						for _, candidate in ipairs(container:GetDescendants()) do
+							if (candidate:IsA("TextButton") or candidate:IsA("ImageButton")) and isActuallyVisible(candidate) then
+								print("[Auto-AFK] Mendeteksi REWARDS PAUSED -> Mengklik tombol:", candidate:GetFullName())
+								clickButton(candidate)
+								return true
+							end
+						end
+					end
+				end
+			end
+		end
+	end
+
+	return false
+end
+
+-- 6. Fungsi utama pemindaian
+local isScanning = false
+
+local function scanAndResolve()
+	if isScanning then return end
+	isScanning = true
+
+	-- Cek semua UI dengan nama AntiMacro
+	for _, child in ipairs(playerGui:GetChildren()) do
+		if child.Name == "AntiMacro" then
+			solveNumberAntiMacro(child)
+		end
+	end
+
+	-- Cek pop-up REWARDS PAUSED
+	solveRewardsPaused()
+
+	task.wait(0.8)
+	isScanning = false
+end
+
+-- 7. Pasang listener pada UI yang ada & baru muncul
 local hookedGuis = setmetatable({}, {__mode = "k"})
 
-local function hookAntiMacro(antiMacroGui)
-	if hookedGuis[antiMacroGui] then return end
-	hookedGuis[antiMacroGui] = true
+local function hookGui(guiObj)
+	if hookedGuis[guiObj] or guiObj.Name == "AntiMacroStatusIndicator" then return end
+	hookedGuis[guiObj] = true
 
-	-- Jalankan jika langsung aktif saat ditemukan
-	solveAntiMacro(antiMacroGui)
-
-	-- Pantau jika ScreenGui di-enable kembali
-	if antiMacroGui:IsA("ScreenGui") then
-		antiMacroGui:GetPropertyChangedSignal("Enabled"):Connect(function()
-			if antiMacroGui.Enabled then
-				solveAntiMacro(antiMacroGui)
+	if guiObj:IsA("ScreenGui") then
+		guiObj:GetPropertyChangedSignal("Enabled"):Connect(function()
+			if guiObj.Enabled then
+				task.wait(0.4)
+				scanAndResolve()
 			end
 		end)
 	end
 
-	-- Pantau jika Frame/label baru ditambahkan ke dalam AntiMacro
-	antiMacroGui.DescendantAdded:Connect(function(desc)
+	guiObj.DescendantAdded:Connect(function(desc)
 		if desc:IsA("TextLabel") or desc:IsA("TextButton") or desc:IsA("ImageButton") then
-			solveAntiMacro(antiMacroGui)
+			task.wait(0.4)
+			scanAndResolve()
 		end
 	end)
-
-	-- Pantau jika ada Frame utama di dalam AntiMacro yang Visible-nya berubah jadi true
-	for _, child in ipairs(antiMacroGui:GetChildren()) do
-		if child:IsA("GuiObject") then
-			child:GetPropertyChangedSignal("Visible"):Connect(function()
-				if child.Visible then
-					solveAntiMacro(antiMacroGui)
-				end
-			end)
-		end
-	end
 end
 
--- 6. Jalankan indikator & pantau terus-menerus
 createStatusIndicator()
 
--- Cek semua AntiMacro yang sudah ada di PlayerGui sejak awal
 for _, child in ipairs(playerGui:GetChildren()) do
-	if child.Name == "AntiMacro" then
-		hookAntiMacro(child)
-	end
+	hookGui(child)
 end
 
--- Pantau jika ada AntiMacro baru yang ditambahkan belakangan
 playerGui.ChildAdded:Connect(function(child)
-	if child.Name == "AntiMacro" then
-		hookAntiMacro(child)
-	end
+	hookGui(child)
+	task.wait(0.4)
+	scanAndResolve()
 end)
 
--- Loop cadangan (setiap 1 detik) untuk memastikan tidak ada pop-up yang terlewat
+-- Loop pemantauan berkala agar pop-up yang muncul setelah execute tetap tertangani
 task.spawn(function()
 	while true do
 		task.wait(1)
-		local antiMacro = playerGui:FindFirstChild("AntiMacro")
-		if antiMacro then
-			hookAntiMacro(antiMacro)
-			solveAntiMacro(antiMacro)
-		end
+		scanAndResolve()
 	end
 end)
