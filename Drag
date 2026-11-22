@@ -1,8 +1,12 @@
+local VERSION = "v3"
+local STATUS_TEXT = "anti makro " .. VERSION .. " aktif"
+
 local Players = game:GetService("Players")
+local GuiService = game:GetService("GuiService")
 local VirtualInputManager = game:GetService("VirtualInputManager")
 local playerGui = Players.LocalPlayer:WaitForChild("PlayerGui")
 
--- 1. Buat UI indikator kecil "anti makro v2 aktif"
+-- 1. Buat UI indikator kecil "anti makro v3 aktif"
 local function createStatusIndicator()
 	local oldGui = playerGui:FindFirstChild("AntiMacroStatusIndicator")
 	if oldGui then
@@ -18,8 +22,8 @@ local function createStatusIndicator()
 
 	local badge = Instance.new("TextLabel")
 	badge.Name = "StatusLabel"
-	badge.Text = "anti makro v2 aktif"
-	badge.Size = UDim2.new(0, 108, 0, 16)
+	badge.Text = STATUS_TEXT
+	badge.Size = UDim2.new(0, 114, 0, 16)
 	badge.Position = UDim2.new(0, 6, 0, 6)
 	badge.BackgroundColor3 = Color3.fromRGB(15, 15, 15)
 	badge.BackgroundTransparency = 0.25
@@ -41,43 +45,7 @@ local function createStatusIndicator()
 	stroke.Parent = badge
 end
 
--- 2. Fungsi klik tombol (firesignal, getconnections, dan fallback VirtualInputManager)
-local function clickButton(btn)
-	if not btn then return end
-
-	if firesignal then
-		pcall(function() firesignal(btn.MouseButton1Click) end)
-		pcall(function() firesignal(btn.MouseButton1Down) end)
-		pcall(function() firesignal(btn.MouseButton1Up) end)
-		pcall(function() firesignal(btn.Activated) end)
-	end
-
-	if getconnections then
-		for _, conn in ipairs(getconnections(btn.MouseButton1Click)) do
-			pcall(function() conn:Fire() end)
-		end
-		for _, conn in ipairs(getconnections(btn.Activated)) do
-			pcall(function() conn:Fire() end)
-		end
-	end
-
-	-- Fallback klik posisi tengah tombol jika dibutuhkan
-	if btn:IsA("GuiObject") and VirtualInputManager then
-		local pos = btn.AbsolutePosition
-		local size = btn.AbsoluteSize
-		if size.X > 0 and size.Y > 0 then
-			local cx = pos.X + (size.X / 2)
-			local cy = pos.Y + (size.Y / 2)
-			pcall(function()
-				VirtualInputManager:SendMouseButtonEvent(cx, cy, 0, true, game, 1)
-				task.wait(0.05)
-				VirtualInputManager:SendMouseButtonEvent(cx, cy, 0, false, game, 1)
-			end)
-		end
-	end
-end
-
--- 3. Cek apakah elemen UI benar-benar terlihat di layar
+-- 2. Cek apakah elemen UI benar-benar terlihat di layar
 local function isActuallyVisible(guiObj)
 	local current = guiObj
 	while current and current ~= playerGui do
@@ -91,7 +59,84 @@ local function isActuallyVisible(guiObj)
 	return true
 end
 
--- 4. Penanganan khusus PausedBanner.TextButton ("REWARDS PAUSED")
+-- 3. Klik lewat sinyal Lua
+local function fireSignalOnce(btn)
+	if not btn then return false end
+
+	if firesignal then
+		local ok = pcall(function()
+			firesignal(btn.Activated)
+		end)
+		if ok then
+			pcall(function() firesignal(btn.MouseButton1Click) end)
+			return true
+		end
+	end
+
+	if getconnections then
+		local fired = false
+		for _, conn in ipairs(getconnections(btn.Activated)) do
+			if pcall(function() conn:Fire() end) then
+				fired = true
+			end
+		end
+		if not fired then
+			for _, conn in ipairs(getconnections(btn.MouseButton1Click)) do
+				if pcall(function() conn:Fire() end) then
+					fired = true
+				end
+			end
+		end
+		return fired
+	end
+
+	return false
+end
+
+-- 4. Klik lewat koordinat layar (Mouse + Touch fallback)
+local function clickAtCenter(btn)
+	if not btn or not btn:IsA("GuiObject") or not VirtualInputManager then
+		return false
+	end
+
+	local pos = btn.AbsolutePosition
+	local size = btn.AbsoluteSize
+	if size.X <= 0 or size.Y <= 0 then
+		return false
+	end
+
+	local inset = GuiService:GetGuiInset()
+	local cx = pos.X + (size.X * 0.5)
+	local cy = pos.Y + (size.Y * 0.5) + inset.Y
+
+	local okMouse = pcall(function()
+		VirtualInputManager:SendMouseButtonEvent(cx, cy, 0, true, game, 1)
+		task.wait(0.06)
+		VirtualInputManager:SendMouseButtonEvent(cx, cy, 0, false, game, 1)
+	end)
+
+	local okTouch = pcall(function()
+		VirtualInputManager:SendTouchEvent(1, Enum.UserInputState.Begin.Value, cx, cy)
+		task.wait(0.06)
+		VirtualInputManager:SendTouchEvent(1, Enum.UserInputState.End.Value, cx, cy)
+	end)
+
+	return okMouse or okTouch
+end
+
+-- 5. Klik tombol bertahap: sinyal dulu, lalu koordinat jika target masih terlihat
+local function smartClick(btn, checkTarget)
+	if not btn then return end
+
+	fireSignalOnce(btn)
+	task.wait(0.25)
+
+	if not checkTarget or isActuallyVisible(checkTarget) then
+		clickAtCenter(btn)
+	end
+end
+
+-- 6. Penanganan PausedBanner.TextButton ("REWARDS PAUSED")
 local function solvePausedBanner(antiMacroGui)
 	local pausedBanner = antiMacroGui:FindFirstChild("PausedBanner")
 	if not pausedBanner or not isActuallyVisible(pausedBanner) then
@@ -99,25 +144,25 @@ local function solvePausedBanner(antiMacroGui)
 	end
 
 	local btn = pausedBanner:FindFirstChild("TextButton")
-	if btn and (btn:IsA("TextButton") or btn:IsA("ImageButton")) and isActuallyVisible(btn) then
-		print("[Auto-AFK v2] Menutup PausedBanner...")
-		clickButton(btn)
-		return true
+	if not (btn and (btn:IsA("TextButton") or btn:IsA("ImageButton")) and isActuallyVisible(btn)) then
+		for _, desc in ipairs(pausedBanner:GetDescendants()) do
+			if (desc:IsA("TextButton") or desc:IsA("ImageButton")) and isActuallyVisible(desc) then
+				btn = desc
+				break
+			end
+		end
 	end
 
-	-- Cadangan jika TextButton berada lebih dalam di dalam PausedBanner
-	for _, desc in ipairs(pausedBanner:GetDescendants()) do
-		if (desc:IsA("TextButton") or desc:IsA("ImageButton")) and isActuallyVisible(desc) then
-			print("[Auto-AFK v2] Menutup PausedBanner (descendant)...")
-			clickButton(desc)
-			return true
-		end
+	if btn then
+		print("[Auto-AFK " .. VERSION .. "] Memproses PausedBanner:", btn:GetFullName())
+		smartClick(btn, pausedBanner)
+		return true
 	end
 
 	return false
 end
 
--- 5. Logika AFK CHECK (mencocokkan angka target dengan tombol angka)
+-- 7. Logika AFK CHECK (mencocokkan angka target dengan tombol angka)
 local function solveNumberAntiMacro(antiMacroGui)
 	local numberLabels = {}
 	local numberButtons = {}
@@ -146,12 +191,12 @@ local function solveNumberAntiMacro(antiMacroGui)
 		return a.size > b.size
 	end)
 
-	local targetNumber = numberLabels[1] and numberLabels[1].text
-	if targetNumber then
+	local topLabel = numberLabels[1]
+	if topLabel then
 		for _, item in ipairs(numberButtons) do
-			if item.text == targetNumber then
-				print("[Auto-AFK v2] Angka target:", targetNumber, "-> Mengklik tombol:", item.text)
-				clickButton(item.btn)
+			if item.text == topLabel.text then
+				print("[Auto-AFK " .. VERSION .. "] Angka target:", topLabel.text, "-> Klik:", item.text)
+				smartClick(item.btn, topLabel.obj)
 				return true
 			end
 		end
@@ -160,7 +205,7 @@ local function solveNumberAntiMacro(antiMacroGui)
 	return false
 end
 
--- 6. Fungsi utama pemindaian semua pop-up di AntiMacro
+-- 8. Fungsi utama pemindaian
 local isScanning = false
 
 local function scanAndResolve()
@@ -169,8 +214,15 @@ local function scanAndResolve()
 
 	for _, child in ipairs(playerGui:GetChildren()) do
 		if child.Name == "AntiMacro" then
-			solvePausedBanner(child)
-			solveNumberAntiMacro(child)
+			local handledPaused = solvePausedBanner(child)
+			if handledPaused then
+				task.wait(1.5)
+			end
+
+			local handledNumber = solveNumberAntiMacro(child)
+			if handledNumber then
+				task.wait(1.5)
+			end
 		end
 	end
 
@@ -178,7 +230,7 @@ local function scanAndResolve()
 	isScanning = false
 end
 
--- 7. Pasang listener pada objek AntiMacro
+-- 9. Pasang listener pada objek AntiMacro
 local hookedGuis = setmetatable({}, {__mode = "k"})
 
 local function hookAntiMacro(antiMacroGui)
@@ -188,7 +240,7 @@ local function hookAntiMacro(antiMacroGui)
 	if antiMacroGui:IsA("ScreenGui") then
 		antiMacroGui:GetPropertyChangedSignal("Enabled"):Connect(function()
 			if antiMacroGui.Enabled then
-				task.wait(0.3)
+				task.wait(0.35)
 				scanAndResolve()
 			end
 		end)
@@ -196,7 +248,7 @@ local function hookAntiMacro(antiMacroGui)
 
 	antiMacroGui.DescendantAdded:Connect(function(desc)
 		if desc:IsA("GuiObject") then
-			task.wait(0.3)
+			task.wait(0.35)
 			scanAndResolve()
 		end
 	end)
@@ -205,7 +257,7 @@ local function hookAntiMacro(antiMacroGui)
 		if child:IsA("GuiObject") then
 			child:GetPropertyChangedSignal("Visible"):Connect(function()
 				if child.Visible then
-					task.wait(0.3)
+					task.wait(0.35)
 					scanAndResolve()
 				end
 			end)
@@ -213,7 +265,7 @@ local function hookAntiMacro(antiMacroGui)
 	end
 end
 
--- 8. Jalankan indikator & pemantauan berkelanjutan
+-- 10. Jalankan indikator & pemantauan berkelanjutan
 createStatusIndicator()
 
 for _, child in ipairs(playerGui:GetChildren()) do
@@ -225,7 +277,7 @@ end
 playerGui.ChildAdded:Connect(function(child)
 	if child.Name == "AntiMacro" then
 		hookAntiMacro(child)
-		task.wait(0.3)
+		task.wait(0.35)
 		scanAndResolve()
 	end
 end)
