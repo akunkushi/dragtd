@@ -1,4 +1,4 @@
-local VERSION = "v4"
+local VERSION = "v5"
 local STATUS_TEXT = "anti makro " .. VERSION .. " aktif"
 
 local Players = game:GetService("Players")
@@ -6,7 +6,7 @@ local GuiService = game:GetService("GuiService")
 local VirtualInputManager = game:GetService("VirtualInputManager")
 local playerGui = Players.LocalPlayer:WaitForChild("PlayerGui")
 
--- 1. Buat UI indikator kecil "anti makro v4 aktif"
+-- 1. Buat UI indikator kecil "anti makro v5 aktif"
 local function createStatusIndicator()
 	local oldGui = playerGui:FindFirstChild("AntiMacroStatusIndicator")
 	if oldGui then
@@ -205,7 +205,7 @@ local function solvePausedBanner(antiMacroGui)
 	return false
 end
 
--- 8. Fungsi utama pemindaian: klik angka dulu, lalu jeda 5 detik, baru klik reward paused
+-- 8. Fungsi utama pemindaian: klik angka dulu, lalu jeda 3 detik, baru klik reward paused
 local isScanning = false
 
 local function scanAndResolve()
@@ -223,8 +223,8 @@ local function scanAndResolve()
 	end
 
 	if didNumberAction then
-		print("[Auto-AFK " .. VERSION .. "] Menunggu 5 detik sebelum memproses Reward Paused...")
-		task.wait(5)
+		print("[Auto-AFK " .. VERSION .. "] Menunggu 3 detik sebelum memproses Reward Paused...")
+		task.wait(3)
 	end
 
 	for _, child in ipairs(playerGui:GetChildren()) do
