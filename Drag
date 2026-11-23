@@ -1,4 +1,4 @@
-local VERSION = "v5"
+local VERSION = "v6"
 local STATUS_TEXT = "anti makro " .. VERSION .. " aktif"
 
 local Players = game:GetService("Players")
@@ -6,7 +6,7 @@ local GuiService = game:GetService("GuiService")
 local VirtualInputManager = game:GetService("VirtualInputManager")
 local playerGui = Players.LocalPlayer:WaitForChild("PlayerGui")
 
--- 1. Buat UI indikator kecil "anti makro v5 aktif"
+-- 1. Buat UI indikator kecil "anti makro v6 aktif"
 local function createStatusIndicator()
 	local oldGui = playerGui:FindFirstChild("AntiMacroStatusIndicator")
 	if oldGui then
@@ -136,7 +136,20 @@ local function smartClick(btn, checkTarget)
 	end
 end
 
--- 6. Logika AFK CHECK (mencocokkan angka target dengan tombol angka)
+-- 6. Cek apakah anti makro angka sedang muncul
+local function hasVisibleNumberAntiMacro(antiMacroGui)
+	for _, obj in ipairs(antiMacroGui:GetDescendants()) do
+		if obj:IsA("TextLabel") and isActuallyVisible(obj) then
+			local cleanText = tostring(obj.Text):match("^%s*(%d+)%s*$")
+			if cleanText and not obj:FindFirstAncestorWhichIsA("TextButton") and not obj:FindFirstAncestorWhichIsA("ImageButton") then
+				return true
+			end
+		end
+	end
+	return false
+end
+
+-- 7. Logika AFK CHECK (mencocokkan angka target dengan tombol angka)
 local function solveNumberAntiMacro(antiMacroGui)
 	local numberLabels = {}
 	local numberButtons = {}
@@ -179,7 +192,7 @@ local function solveNumberAntiMacro(antiMacroGui)
 	return false
 end
 
--- 7. Penanganan PausedBanner.TextButton ("REWARDS PAUSED")
+-- 8. Penanganan PausedBanner.TextButton ("REWARDS PAUSED")
 local function solvePausedBanner(antiMacroGui)
 	local pausedBanner = antiMacroGui:FindFirstChild("PausedBanner")
 	if not pausedBanner or not isActuallyVisible(pausedBanner) then
@@ -205,26 +218,30 @@ local function solvePausedBanner(antiMacroGui)
 	return false
 end
 
--- 8. Fungsi utama pemindaian: klik angka dulu, lalu jeda 3 detik, baru klik reward paused
+-- 9. Fungsi utama pemindaian: anti makro angka dulu (jeda 2 detik saat muncul), lalu langsung reward paused tanpa jeda
 local isScanning = false
 
 local function scanAndResolve()
 	if isScanning then return end
 	isScanning = true
 
-	local didNumberAction = false
-
+	local hasNumberPopup = false
 	for _, child in ipairs(playerGui:GetChildren()) do
-		if child.Name == "AntiMacro" then
-			if solveNumberAntiMacro(child) then
-				didNumberAction = true
-			end
+		if child.Name == "AntiMacro" and hasVisibleNumberAntiMacro(child) then
+			hasNumberPopup = true
+			break
 		end
 	end
 
-	if didNumberAction then
-		print("[Auto-AFK " .. VERSION .. "] Menunggu 3 detik sebelum memproses Reward Paused...")
-		task.wait(3)
+	if hasNumberPopup then
+		print("[Auto-AFK " .. VERSION .. "] Anti makro angka muncul, jeda 2 detik...")
+		task.wait(2)
+	end
+
+	for _, child in ipairs(playerGui:GetChildren()) do
+		if child.Name == "AntiMacro" then
+			solveNumberAntiMacro(child)
+		end
 	end
 
 	for _, child in ipairs(playerGui:GetChildren()) do
@@ -233,11 +250,11 @@ local function scanAndResolve()
 		end
 	end
 
-	task.wait(0.8)
+	task.wait(0.5)
 	isScanning = false
 end
 
--- 9. Pasang listener pada objek AntiMacro
+-- 10. Pasang listener pada objek AntiMacro
 local hookedGuis = setmetatable({}, {__mode = "k"})
 
 local function hookAntiMacro(antiMacroGui)
@@ -247,7 +264,6 @@ local function hookAntiMacro(antiMacroGui)
 	if antiMacroGui:IsA("ScreenGui") then
 		antiMacroGui:GetPropertyChangedSignal("Enabled"):Connect(function()
 			if antiMacroGui.Enabled then
-				task.wait(0.35)
 				scanAndResolve()
 			end
 		end)
@@ -255,7 +271,6 @@ local function hookAntiMacro(antiMacroGui)
 
 	antiMacroGui.DescendantAdded:Connect(function(desc)
 		if desc:IsA("GuiObject") then
-			task.wait(0.35)
 			scanAndResolve()
 		end
 	end)
@@ -264,7 +279,6 @@ local function hookAntiMacro(antiMacroGui)
 		if child:IsA("GuiObject") then
 			child:GetPropertyChangedSignal("Visible"):Connect(function()
 				if child.Visible then
-					task.wait(0.35)
 					scanAndResolve()
 				end
 			end)
@@ -272,7 +286,7 @@ local function hookAntiMacro(antiMacroGui)
 	end
 end
 
--- 10. Jalankan indikator & pemantauan berkelanjutan
+-- 11. Jalankan indikator & pemantauan berkelanjutan
 createStatusIndicator()
 
 for _, child in ipairs(playerGui:GetChildren()) do
@@ -284,7 +298,6 @@ end
 playerGui.ChildAdded:Connect(function(child)
 	if child.Name == "AntiMacro" then
 		hookAntiMacro(child)
-		task.wait(0.35)
 		scanAndResolve()
 	end
 end)
